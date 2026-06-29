@@ -4,24 +4,21 @@ import {
   Upload, Trash2, Copy, Check, Clock, AlertCircle,
   Loader2, Zap, Share2, Pencil, Bell, ChevronRight,
   CreditCard, Activity, Wallet, Home, Scale,
-  Sparkles, Shield, FolderOpen,
+  Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe,
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EM }                                   from '../data.js';
-import { tryUnlock, saveVault }                                   from '../crypto.js';
+import { tryUnlock, saveVault, changePin, exportLocalBlob, tryUnlockFromRemote } from '../crypto.js';
+import {
+  supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
+  onAuthChange, pushVault, pullVault,
+} from '../sync.js';
 
-// ── Groq config ───────────────────────────────────────────────────────────────
-// Free tier — no credit card. Sign up at https://console.groq.com
-const GROQ_KEY         = import.meta.env.VITE_GROQ_API_KEY         ?? '';
-const GROQ_VISION_MODEL = import.meta.env.VITE_GROQ_VISION_MODEL  ?? 'qwen/qwen3.6-27b';
-const GROQ_URL          = 'https://api.groq.com/openai/v1/chat/completions';
-
-// ── AI document scanner (Groq) ────────────────────────────────────────────────
-// Groq supports images (PNG, JPG, WEBP) up to 4 MB via base64.
-// PDFs are NOT natively supported — the UI will show a friendly message.
+// ── AI document scanner ────────────────────────────────────────────────────────
+// The actual Groq call + API key live server-side in /api/scan.js (Vercel
+// serverless function). The browser only ever sends the image and gets back
+// parsed fields — it never sees, holds, or can extract the Groq key.
 async function scanDocumentWithAI(file) {
-  if (!GROQ_KEY) throw new Error('NO_KEY');
-
   // Build base64 data URL
   const b64 = await new Promise((res, rej) => {
     const r = new FileReader();
@@ -29,73 +26,42 @@ async function scanDocumentWithAI(file) {
     r.onerror = rej;
     r.readAsDataURL(file);
   });
-
   const dataUrl = `data:${file.type};base64,${b64}`;
 
-  const PROMPT = `You are a document data extractor. Carefully read this document image and extract the key fields.
-Return ONLY a valid JSON object with no markdown fences, explanation, or extra text:
-{
-  "name": "document type in English (e.g. Aadhar Card, PAN Card, Passport, Driver's License, Health Insurance)",
-  "category": "one of: identity | medical | financial | property | legal",
-  "num": "the primary document number, ID number, or policy number",
-  "by": "the issuing authority or organization",
-  "issued": "issue date in YYYY-MM-DD format, or null if not visible",
-  "expires": "expiry date in YYYY-MM-DD format, or null if the document doesn't expire",
-  "notes": "any other important details in one short sentence (blood group, sum insured, UAN, etc.), or empty string"
-}`;
-
-  const body = {
-    model: GROQ_VISION_MODEL,
-    max_tokens: 600,
-    temperature: 0.1,
-    response_format: { type: 'json_object' }, // force JSON output
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: { url: dataUrl },
-          },
-          {
-            type: 'text',
-            text: PROMPT,
-          },
-        ],
-      },
-    ],
-  };
-
-  const res = await fetch(GROQ_URL, {
+  const res = await fetch('/api/scan', {
     method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${GROQ_KEY}`,
-    },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ dataUrl, mimeType: file.type }),
   });
 
+  const data = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message ?? `Groq error ${res.status}`);
+    if (data?.error === 'NO_SERVER_KEY') throw new Error('NO_KEY');
+    throw new Error(data?.message ?? `Scan failed (${res.status})`);
   }
-
-  const data    = await res.json();
-  const content = data.choices?.[0]?.message?.content ?? '{}';
-
-  // Safely parse — Groq with response_format:json_object should always return valid JSON
-  return JSON.parse(content.replace(/```json|```/g, '').trim());
+  return data;
 }
 
 // ── VaultApp ──────────────────────────────────────────────────────────────────
 export default function VaultApp({ onBack }) {
   // ── theme / auth ──
   const [dark,      setDark]      = useState(true);
+  const [sbCollapsed, setSbCollapsed] = useState(false);
   const [phase,     setPhase]     = useState('boot');  // boot | locked | unlocking | open
   const [pin,       setPin]       = useState('');
   const [pinErr,    setPinErr]    = useState(false);
   const [unlockOk,  setUnlockOk]  = useState(false);
   const [cryptoKey, setCryptoKey] = useState(null);
+  const [failCount, setFailCount] = useState(0);
+  const [lockedOut, setLockedOut] = useState(false);
+  const [lockRemain,setLockRemain]= useState(0);
+
+  // ── cloud sync / auth ──
+  const [user,       setUser]       = useState(null);
+  const [authBusy,   setAuthBusy]   = useState(false);
+  const [syncing,    setSyncing]    = useState(false);
+  const [syncErr,    setSyncErr]    = useState(null);
 
   // ── vault data ──
   const [docs, setDocs] = useState([]);
@@ -105,11 +71,21 @@ export default function VaultApp({ onBack }) {
   const [cat,        setCat]        = useState('all');
   const [q,          setQ]          = useState('');
   const [docView,    setDocView]    = useState(null);
+  const [kebabOpen,  setKebabOpen]  = useState(false);
   const [addOpen,    setAddOpen]    = useState(false);
   const [emOpen,     setEmOpen]     = useState(false);
+  const [pinModal,   setPinModal]   = useState(false);
+  const [pinOld,     setPinOld]     = useState('');
+  const [pinNew,     setPinNew]     = useState('');
+  const [pinNew2,    setPinNew2]    = useState('');
+  const [pinChErr,   setPinChErr]   = useState(null);
+  const [pinChBusy,  setPinChBusy]  = useState(false);
   const [notifOpen,  setNotifOpen]  = useState(false);
   const [cpId,       setCpId]       = useState(null);
   const [toast,      setToast]      = useState(null);
+  const [idleWarn,   setIdleWarn]   = useState(false);
+  const idleTimer    = useRef(null);
+  const idleWarnTimer= useRef(null);
 
   // ── add-document modal ──
   const [addTab,     setAddTab]     = useState('scan');
@@ -127,6 +103,63 @@ export default function VaultApp({ onBack }) {
   // Boot delay
   useEffect(() => { setTimeout(() => setPhase('locked'), 300); }, []);
 
+  // ── Auth state ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    getCurrentUser().then(setUser);
+    const unsub = onAuthChange(setUser);
+    return unsub;
+  }, []);
+
+  async function handleGoogleSignIn() {
+    setAuthBusy(true); setSyncErr(null);
+    try {
+      await signInWithGoogle();
+      // Browser redirects for OAuth — execution typically doesn't continue past here.
+    } catch (e) {
+      setSyncErr(e.message === 'SUPABASE_NOT_CONFIGURED'
+        ? 'Cloud sync isn\'t configured yet — add VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY to .env'
+        : `Sign-in failed: ${e.message}`);
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    setUser(null);
+    showToast('Signed out — vault stays local-only');
+  }
+
+  // ── Auto-lock on idle ───────────────────────────────────────────────────────
+  // Warn at 4 min idle, lock at 5 min. Resets on any mouse/keyboard/touch
+  // activity. Only runs while the vault is unlocked — a left-open device
+  // with sensitive docs visible is the realistic risk this addresses.
+  useEffect(() => {
+    if (phase !== 'open') return;
+
+    const WARN_MS = 4 * 60 * 1000;
+    const LOCK_MS = 5 * 60 * 1000;
+
+    function resetIdle() {
+      setIdleWarn(false);
+      clearTimeout(idleTimer.current);
+      clearTimeout(idleWarnTimer.current);
+      idleWarnTimer.current = setTimeout(() => setIdleWarn(true), WARN_MS);
+      idleTimer.current = setTimeout(() => {
+        setPhase('locked'); setCryptoKey(null); setDocs([]); setImgs({}); setIdleWarn(false);
+      }, LOCK_MS);
+    }
+
+    const events = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'];
+    events.forEach((ev) => window.addEventListener(ev, resetIdle));
+    resetIdle();
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, resetIdle));
+      clearTimeout(idleTimer.current);
+      clearTimeout(idleWarnTimer.current);
+    };
+  }, [phase]);
+
   // ── Toast ─────────────────────────────────────────────────────────────────
   const showToast = (txt, type = 'ok') => {
     setToast({ txt, type });
@@ -134,24 +167,63 @@ export default function VaultApp({ onBack }) {
   };
 
   // ── PIN ───────────────────────────────────────────────────────────────────
+  // On a fresh device with no local vault yet, but a signed-in user with an
+  // existing cloud vault, try the remote copy first. Otherwise fall back to
+  // the normal local unlock (which also handles first-run/demo seeding).
+  async function resolveUnlock(np) {
+    const hasLocalVault = !!localStorage.getItem('vid_vault');
+    if (!hasLocalVault && user && supabaseEnabled) {
+      const remote = await pullVault(user.id);
+      if (remote.ok && remote.found) {
+        const r = await tryUnlockFromRemote(np, { saltB64: remote.salt, enc: remote.enc });
+        if (r.ok) return r;
+        // Wrong PIN against the remote vault — don't fall through to a
+        // fresh local vault, that would silently mask the real error.
+        return { ok: false };
+      }
+    }
+    return tryUnlock(np, DOCS0);
+  }
+
+  const PIN_LEN = 6;
   async function pressKey(k) {
-    if (phase === 'unlocking') return;
-    if (pin.length >= 4) return;
+    if (phase === 'unlocking' || lockedOut) return;
+    if (pin.length >= PIN_LEN) return;
     const np = pin + k;
     setPin(np);
-    if (np.length !== 4) return;
+    if (np.length !== PIN_LEN) return;
 
     setPhase('unlocking');
     setTimeout(async () => {
-      const res = await tryUnlock(np, DOCS0);
+      const res = await resolveUnlock(np);
       if (res.ok) {
+        setFailCount(0);
         setCryptoKey(res.key);
         setDocs(res.docs);
         setImgs(res.imgs);
         setUnlockOk(true);
         setTimeout(() => { setPhase('open'); setPin(''); setUnlockOk(false); }, 550);
       } else {
+        const nextFail = failCount + 1;
+        setFailCount(nextFail);
         setPinErr(true);
+
+        if (nextFail >= 5) {
+          // Lock out for 30s after 5 wrong attempts — slows down anyone
+          // guessing through the UI. Doesn't stop someone attacking the
+          // raw localStorage data directly, but raises the bar for the
+          // common case (someone picking up an unlocked/left-open device).
+          const seconds = 30;
+          setLockedOut(true);
+          setLockRemain(seconds);
+          const iv = setInterval(() => {
+            setLockRemain((s) => {
+              if (s <= 1) { clearInterval(iv); setLockedOut(false); setFailCount(0); return 0; }
+              return s - 1;
+            });
+          }, 1000);
+        }
+
         setTimeout(() => { setPin(''); setPinErr(false); setPhase('locked'); }, 700);
       }
     }, 80);
@@ -159,7 +231,20 @@ export default function VaultApp({ onBack }) {
 
   // ── Vault persistence ─────────────────────────────────────────────────────
   async function persist(newDocs, newImgs) {
-    if (cryptoKey) await saveVault(newDocs, newImgs, cryptoKey);
+    if (!cryptoKey) return;
+    await saveVault(newDocs, newImgs, cryptoKey);
+
+    // Mirror to cloud if signed in — best-effort, never blocks the local save.
+    if (user && supabaseEnabled) {
+      setSyncing(true);
+      const blob = exportLocalBlob();
+      if (blob) {
+        const res = await pushVault(user.id, blob.saltB64, blob.enc);
+        if (!res.ok) setSyncErr(`Cloud sync failed: ${res.reason}`);
+        else setSyncErr(null);
+      }
+      setSyncing(false);
+    }
   }
 
   // ── Copy number ───────────────────────────────────────────────────────────
@@ -189,11 +274,6 @@ export default function VaultApp({ onBack }) {
       setAErr('File too large — Groq\'s limit is 4 MB. Please compress or crop the image.');
       return;
     }
-    if (!GROQ_KEY) {
-      setAErr('No Groq API key found. Add VITE_GROQ_API_KEY to your .env file — it\'s free at console.groq.com');
-      return;
-    }
-
     setFile(f); setAErr(null);
 
     // Show preview
@@ -220,7 +300,7 @@ export default function VaultApp({ onBack }) {
       setAnalyzed(true);
     } catch (err) {
       const msg = err.message === 'NO_KEY'
-        ? 'Add VITE_GROQ_API_KEY to your .env file (free at console.groq.com)'
+        ? 'Add GROQ_API_KEY to your server environment (Vercel project settings → Environment Variables) — free at console.groq.com'
         : `Scan failed: ${err.message}. Try manual entry below.`;
       setAErr(msg);
       setAddTab('manual');
@@ -229,7 +309,66 @@ export default function VaultApp({ onBack }) {
     }
   }
 
-  // ── Save / delete ─────────────────────────────────────────────────────────
+  async function handlePinChange() {
+    setPinChErr(null);
+    if (!/^\d{6}$/.test(pinNew)) return setPinChErr('New PIN must be exactly 6 digits.');
+    if (pinNew !== pinNew2)      return setPinChErr('New PIN entries don\'t match.');
+    if (pinNew === pinOld)       return setPinChErr('New PIN must differ from the old one.');
+
+    setPinChBusy(true);
+    const res = await changePin(pinOld, pinNew);
+    setPinChBusy(false);
+
+    if (!res.ok) {
+      setPinChErr(res.reason === 'WRONG_PIN' ? 'Current PIN is incorrect.' : 'Could not change PIN.');
+      return;
+    }
+    setCryptoKey(res.key);
+    setPinModal(false);
+    setPinOld(''); setPinNew(''); setPinNew2('');
+    showToast('PIN changed successfully');
+  }
+
+  function openPinModal() {
+    setPinOld(''); setPinNew(''); setPinNew2(''); setPinChErr(null);
+    setPinModal(true);
+  }
+
+  // ── Download helpers ─────────────────────────────────────────────────────
+  function downloadJPEG(doc) {
+    const dataUrl = imgs[doc.id];
+    if (!dataUrl) return showToast('No image attached to this document', 'err');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `${doc.name.replace(/[^a-z0-9]+/gi, '_')}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast('Downloaded as JPEG');
+  }
+
+  async function downloadPDF(doc) {
+    const dataUrl = imgs[doc.id];
+    if (!dataUrl) return showToast('No image attached to this document', 'err');
+    try {
+      // jsPDF loaded on-demand from CDN — keeps it out of the main bundle
+      // since most sessions never trigger a PDF download.
+      const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+
+      const pdf = new jsPDF({ orientation: img.width > img.height ? 'landscape' : 'portrait', unit: 'pt' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const ratio = Math.min(pageW / img.width, pageH / img.height) * 0.92;
+      const w = img.width * ratio, h = img.height * ratio;
+      pdf.addImage(dataUrl, 'JPEG', (pageW - w) / 2, (pageH - h) / 2, w, h);
+      pdf.save(`${doc.name.replace(/[^a-z0-9]+/gi, '_')}.pdf`);
+      showToast('Downloaded as PDF');
+    } catch (e) {
+      showToast('PDF export failed — check connection', 'err');
+    }
+  }
+
+
   async function saveDoc() {
     if (!nd.name.trim() || !nd.num.trim()) return;
     const newId   = Date.now();
@@ -332,7 +471,7 @@ export default function VaultApp({ onBack }) {
         {phase !== 'boot' && (
           <>
             <div className={pinErr ? 'shk' : ''} style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}>
-              {[0, 1, 2, 3].map((i) => (
+              {Array.from({ length: PIN_LEN }).map((_, i) => (
                 <div key={i} style={{ width: 13, height: 13, borderRadius: 4, background: pin.length > i ? 'var(--ac1)' : 'var(--bd2)', transition: 'all .15s', boxShadow: pin.length > i ? '0 0 12px var(--ac1)' : undefined }} />
               ))}
             </div>
@@ -346,12 +485,15 @@ export default function VaultApp({ onBack }) {
               <button className="nk" style={{ fontSize: 16 }} onClick={() => setPin((p) => p.slice(0, -1))}>⌫</button>
             </div>
 
-            {pinErr   && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>Incorrect PIN — try again</p>}
+            {lockedOut && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Too many attempts — try again in {lockRemain}s</p>}
+            {!lockedOut && pinErr   && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>Incorrect PIN — try again</p>}
             {unlockOk && <p style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
 
-            <p style={{ color: 'var(--tx4)', fontSize: 11, marginTop: 20 }}>
-              Demo PIN: <code style={{ color: 'var(--act)', fontFamily: "'JetBrains Mono', monospace" }}>1234</code>
-            </p>
+            {import.meta.env.VITE_DEMO_MODE === 'true' && (
+              <p style={{ color: 'var(--tx4)', fontSize: 11, marginTop: 20 }}>
+                Demo PIN: <code style={{ color: 'var(--act)', fontFamily: "'JetBrains Mono', monospace" }}>123456</code>
+              </p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
               <span className="sbadge"><Shield size={10} />AES-256-GCM · Groq AI</span>
             </div>
@@ -368,20 +510,30 @@ export default function VaultApp({ onBack }) {
     <div className="app" data-t={theme} style={{ height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--bg)', color: 'var(--tx)' }}>
 
       {/* ── SIDEBAR ── */}
-      <aside className="asidebar" style={{ width: 215, background: 'var(--gl)', backdropFilter: 'blur(20px)', borderRight: '1px solid var(--bd)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto' }}>
+      <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={{ width: sbCollapsed ? 64 : 215, background: 'var(--gl)', backdropFilter: 'blur(20px)', borderRight: '1px solid var(--bd)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto' }}>
         <div style={{ padding: '8px 10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <ShieldCheck size={17} color="#fff" />
           </div>
-          <span className="gtext" style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif" }}>VaultID</span>
+          <span className="gtext sb-logo-text" style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", flex: 1 }}>VaultID</span>
+          {!sbCollapsed && (
+            <button className="sb-collapse-btn" onClick={() => setSbCollapsed(true)} title="Collapse sidebar">
+              <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} />
+            </button>
+          )}
         </div>
+        {sbCollapsed && (
+          <button className="sb-collapse-btn" style={{ margin: '0 auto 10px' }} onClick={() => setSbCollapsed(false)} title="Expand sidebar">
+            <ChevronRight size={13} />
+          </button>
+        )}
 
-        <p className="lbl" style={{ padding: '0 10px 6px' }}>Library</p>
+        <p className="lbl sb-label" style={{ padding: '0 10px 6px' }}>Library</p>
         {Object.entries(VAULT_CAT).map(([k, m]) => {
           const Ic  = CAT_ICONS[k] ?? FolderOpen;
           const cnt = k === 'all' ? docs.length : docs.filter((d) => d.cat === k).length;
           return (
-            <div key={k} className={`anv${cat === k ? ' on' : ''}`} onClick={() => setCat(k)}>
+            <div key={k} className={`anv${cat === k ? ' on' : ''}`} onClick={() => setCat(k)} title={sbCollapsed ? m.label : undefined}>
               <Ic size={15} /><span style={{ flex: 1 }}>{m.label}</span>
               <span className="cnt">{cnt}</span>
             </div>
@@ -389,10 +541,10 @@ export default function VaultApp({ onBack }) {
         })}
 
         <div className="divr" />
-        <div className="anv danger" onClick={() => setEmOpen(true)}>
+        <div className="anv danger" onClick={() => setEmOpen(true)} title={sbCollapsed ? 'Emergency Card' : undefined}>
           <Zap size={15} /><span style={{ flex: 1 }}>Emergency Card</span><ChevronRight size={13} />
         </div>
-        <div className="anv" onClick={() => setNotifOpen((o) => !o)}>
+        <div className="anv" onClick={() => setNotifOpen((o) => !o)} title={sbCollapsed ? 'Alerts' : undefined}>
           <Bell size={15} /><span style={{ flex: 1 }}>Alerts</span>
           {notifs.length > 0 && (
             <span style={{ background: 'var(--re)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20 }}>
@@ -400,11 +552,44 @@ export default function VaultApp({ onBack }) {
             </span>
           )}
         </div>
+        <div className="anv" onClick={openPinModal} title={sbCollapsed ? 'Change PIN' : undefined}>
+          <Lock size={15} /><span style={{ flex: 1 }}>Change PIN</span>
+        </div>
 
         <div style={{ flex: 1 }} />
         <div className="divr" />
+
+        {supabaseEnabled && (
+          user ? (
+            <div className="anv" style={{ cursor: 'default' }} title={sbCollapsed ? user.email : undefined}>
+              {user.user_metadata?.avatar_url
+                ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0 }} />
+                : <Globe size={15} />}
+              <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.email}
+              </span>
+              {syncing
+                ? <Loader2 size={12} className="spin" style={{ color: 'var(--tx3)' }} />
+                : <span title="Synced"><Check size={12} style={{ color: 'var(--gr)' }} /></span>}
+            </div>
+          ) : (
+            <div className="anv" onClick={handleGoogleSignIn} title={sbCollapsed ? 'Sign in with Google' : undefined}>
+              {authBusy ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
+              <span style={{ flex: 1 }}>{authBusy ? 'Signing in…' : 'Sign in with Google'}</span>
+            </div>
+          )
+        )}
+        {user && (
+          <div className="anv" onClick={handleSignOut} title={sbCollapsed ? 'Sign out' : undefined}>
+            <X size={15} /><span style={{ flex: 1, fontSize: 13 }}>Sign Out</span>
+          </div>
+        )}
+        {syncErr && !sbCollapsed && (
+          <p style={{ fontSize: 10.5, color: 'var(--re)', padding: '2px 10px 4px', lineHeight: 1.4 }}>{syncErr}</p>
+        )}
+
         {onBack && (
-          <div className="anv" style={{ color: 'var(--tx3)' }} onClick={onBack}>
+          <div className="anv" style={{ color: 'var(--tx3)' }} onClick={onBack} title={sbCollapsed ? 'Back to Site' : undefined}>
             <ChevronRight size={15} style={{ transform: 'rotate(180deg)' }} />
             <span style={{ flex: 1, fontSize: 13 }}>Back to Site</span>
           </div>
@@ -412,6 +597,7 @@ export default function VaultApp({ onBack }) {
         <div
           className="anv"
           style={{ color: 'var(--tx3)' }}
+          title={sbCollapsed ? 'Lock Vault' : undefined}
           onClick={() => { setPhase('locked'); setCryptoKey(null); setDocs([]); setImgs({}); }}
         >
           <Lock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Lock Vault</span>
@@ -499,7 +685,7 @@ export default function VaultApp({ onBack }) {
                 const cc  = VAULT_CAT[doc.cat]?.color ?? '#7B6FE8';
                 const has = !!imgs[doc.id];
                 return (
-                  <TiltCard key={doc.id} onClick={() => setDocView(doc)}>
+                  <TiltCard key={doc.id} onClick={() => { setDocView(doc); setKebabOpen(false); }}>
                     <div className="acard" style={{ borderTop: `2.5px solid ${cc}`, padding: 16, position: 'relative', overflow: 'hidden' }}>
                       <div className="shine" style={{ position: 'absolute', inset: 0, borderRadius: 16, pointerEvents: 'none', transition: 'background .1s' }} />
                       <div style={{ position: 'relative' }}>
@@ -562,10 +748,16 @@ export default function VaultApp({ onBack }) {
                     <p style={{ margin: 0, fontSize: 12, color: 'var(--tx3)' }}>{docView.by}</p>
                   </div>
                 </div>
-                <button className="abic" onClick={() => setDocView(null)}><X size={18} /></button>
+                <button className="abic" onClick={() => { setDocView(null); setKebabOpen(false); }}><X size={18} /></button>
               </div>
 
-              {has && <img src={imgs[docView.id]} style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 10, background: 'var(--bg2)', marginBottom: 16 }} alt="Document" />}
+              {has ? (
+                <img src={imgs[docView.id]} style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 10, background: 'var(--bg2)', marginBottom: 16 }} alt="Document" />
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                  <span className="no-img-tag"><AlertCircle size={11} />No image attached</span>
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
                 {[
@@ -600,7 +792,31 @@ export default function VaultApp({ onBack }) {
 
               <div style={{ display: 'flex', gap: 10, paddingTop: 18, borderTop: '1px solid var(--bd)' }}>
                 <button className="abtn abg" style={{ flex: 1, justifyContent: 'center' }}><Pencil size={13} />Edit</button>
-                <button className="abtn abd" onClick={() => deleteDoc(docView.id)}><Trash2 size={13} />Delete</button>
+                <div className="kebab-menu">
+                  <button className="abic" style={{ border: '1px solid var(--bd)' }} onClick={() => setKebabOpen((o) => !o)} title="More actions">
+                    <MoreVertical size={16} />
+                  </button>
+                  {kebabOpen && (
+                    <>
+                      <div style={{ position: 'fixed', inset: 0, zIndex: 19 }} onClick={() => setKebabOpen(false)} />
+                      <div className="kebab-pop">
+                        {has && (
+                          <>
+                            <div className="kebab-item" onClick={() => { downloadJPEG(docView); setKebabOpen(false); }}>
+                              <Download size={14} />Download as JPEG
+                            </div>
+                            <div className="kebab-item" onClick={() => { downloadPDF(docView); setKebabOpen(false); }}>
+                              <Download size={14} />Download as PDF
+                            </div>
+                          </>
+                        )}
+                        <div className="kebab-item danger" onClick={() => { deleteDoc(docView.id); setKebabOpen(false); }}>
+                          <Trash2 size={14} />Delete document
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -632,7 +848,7 @@ export default function VaultApp({ onBack }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--acs)', border: '1px solid rgba(123,111,232,.25)', borderRadius: 9, padding: '8px 12px', marginBottom: 16 }}>
                   <Sparkles size={13} style={{ color: 'var(--ac1)', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: 'var(--act)', flex: 1 }}>
-                    Powered by <strong>Groq</strong> · {GROQ_VISION_MODEL} · Free tier
+                    Powered by <strong>Groq</strong> · Free tier
                   </span>
                   <span style={{ fontSize: 10, color: 'var(--tx4)' }}>PNG/JPG/WEBP · max 4 MB</span>
                 </div>
@@ -668,10 +884,11 @@ export default function VaultApp({ onBack }) {
                 )}
 
                 {aErr && (
-                  <div style={{ background: 'var(--res)', border: '1px solid var(--re)', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                    <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--ret)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AlertCircle size={14} />{aErr}
-                    </p>
+                  <div style={{ textAlign: 'center', background: 'var(--res)', border: '1px solid var(--re)', borderRadius: 12, padding: '20px 16px', marginBottom: 14 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(248,113,113,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', color: 'var(--re)' }}>
+                      <AlertCircle size={20} />
+                    </div>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--ret)', fontWeight: 600 }}>{aErr}</p>
                     <button className="abtn abg" style={{ fontSize: 12, padding: '5px 11px' }} onClick={() => { setAErr(null); setAddTab('manual'); }}>
                       Fill in manually instead
                     </button>
@@ -752,6 +969,68 @@ export default function VaultApp({ onBack }) {
               <Share2 size={15} />Share Emergency Card
             </button>
           </div>
+        </div>
+      )}
+
+      {/* ═══ CHANGE PIN MODAL ═══ */}
+      {pinModal && (
+        <div className="mbg" onClick={() => setPinModal(false)}>
+          <div className="mbox si" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Change PIN</h3>
+              <button className="abic" onClick={() => setPinModal(false)}><X size={18} /></button>
+            </div>
+
+            {pinChErr && (
+              <div style={{ background: 'var(--res)', border: '1px solid var(--re)', borderRadius: 10, padding: '10px 13px', marginBottom: 14, fontSize: 13, color: 'var(--ret)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertCircle size={14} />{pinChErr}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label>
+                <div className="lbl" style={{ marginBottom: 5 }}>Current PIN</div>
+                <input
+                  type="password" inputMode="numeric" maxLength={6}
+                  value={pinOld} onChange={(e) => setPinOld(e.target.value.replace(/\D/g, ''))}
+                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+              </label>
+              <label>
+                <div className="lbl" style={{ marginBottom: 5 }}>New PIN (6 digits)</div>
+                <input
+                  type="password" inputMode="numeric" maxLength={6}
+                  value={pinNew} onChange={(e) => setPinNew(e.target.value.replace(/\D/g, ''))}
+                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+              </label>
+              <label>
+                <div className="lbl" style={{ marginBottom: 5 }}>Confirm New PIN</div>
+                <input
+                  type="password" inputMode="numeric" maxLength={6}
+                  value={pinNew2} onChange={(e) => setPinNew2(e.target.value.replace(/\D/g, ''))}
+                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--bd)', justifyContent: 'flex-end' }}>
+              <button className="abtn abg" onClick={() => setPinModal(false)}>Cancel</button>
+              <button className="abtn abp" onClick={handlePinChange} disabled={pinChBusy}>
+                {pinChBusy ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
+                {pinChBusy ? 'Re-encrypting…' : 'Save New PIN'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ IDLE AUTO-LOCK WARNING ═══ */}
+      {idleWarn && phase === 'open' && (
+        <div className="idle-warn">
+          <Clock size={14} />
+          Vault will auto-lock in 1 minute due to inactivity
+          <button onClick={() => setIdleWarn(false)}>I'm still here</button>
         </div>
       )}
 

@@ -77,6 +77,8 @@ export function TiltCard({ children, onClick, style }) {
       ref={ref}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
+      onMouseDown={(e) => { if (ref.current) ref.current.style.transform += ' scale(.98)'; }}
+      onMouseUp={onLeave}
       onClick={onClick}
       style={{ transition: 'transform .12s ease, box-shadow .12s ease', cursor: 'pointer', ...style }}
     >

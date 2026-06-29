@@ -121,3 +121,72 @@ export function resetVault() {
   LS.del('vid_vault');
   LS.del('vid_salt');
 }
+
+/**
+ * Return the raw { saltB64, enc } currently in localStorage, for pushing to
+ * cloud sync. Returns null if there's nothing to sync yet.
+ */
+export function exportLocalBlob() {
+  const saltB64 = LS.get('vid_salt');
+  const raw     = LS.get('vid_vault');
+  if (!saltB64 || !raw) return null;
+  return { saltB64, enc: JSON.parse(raw) };
+}
+
+/**
+ * Try to unlock using a blob pulled from cloud sync rather than localStorage
+ * (e.g. first login on a new device). On success, also writes it into
+ * localStorage so this device has an offline-capable copy going forward.
+ *
+ * @param {string} pin
+ * @param {{ saltB64: string, enc: {iv,ct} }} remote
+ */
+export async function tryUnlockFromRemote(pin, remote) {
+  try {
+    const salt = b642buf(remote.saltB64);
+    const key  = await deriveKey(pin, salt);
+    const data = await aesDecrypt(remote.enc, key);
+
+    LS.set('vid_salt', remote.saltB64);
+    LS.set('vid_vault', JSON.stringify(remote.enc));
+
+    return { ok: true, key, docs: data.docs ?? [], imgs: data.imgs ?? {} };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Change the PIN: re-encrypts the vault under a brand-new salt + key.
+ * Re-salting on every PIN change means an attacker who captured an old
+ * (salt, ciphertext) pair from a previous backup can't reuse it against
+ * the new PIN.
+ *
+ * @param {string} oldPin
+ * @param {string} newPin
+ * @returns {{ ok: boolean, key?: CryptoKey, reason?: string }}
+ */
+export async function changePin(oldPin, newPin) {
+  try {
+    const oldSalt = await getSalt();
+    const oldKey  = await deriveKey(oldPin, oldSalt);
+    const raw     = LS.get('vid_vault');
+    if (!raw) return { ok: false, reason: 'NO_VAULT' };
+
+    // Verify the old PIN actually unlocks the vault before changing anything.
+    const data = await aesDecrypt(JSON.parse(raw), oldKey);
+
+    // Fresh salt + key for the new PIN.
+    const newSaltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const newSaltB64   = buf2b64(newSaltBytes);
+    const newKey        = await deriveKey(newPin, newSaltBytes);
+
+    const enc = await aesEncrypt(data, newKey);
+    LS.set('vid_salt', newSaltB64);
+    LS.set('vid_vault', JSON.stringify(enc));
+
+    return { ok: true, key: newKey };
+  } catch {
+    return { ok: false, reason: 'WRONG_PIN' };
+  }
+}

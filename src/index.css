@@ -30,7 +30,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 .app[data-t="dark"] {
   --bg:   #07070F; --bg2:  #0E0E1C; --sur:  #131324; --sur2: #1A1A30;
   --bd:   #222240; --bd2:  #32325A;
-  --tx:   #EEEEFF; --tx2:  #AAAAC8; --tx3:  #666690; --tx4:  #404060;
+  --tx:   #EEEEFF; --tx2:  #AAAAC8; --tx3:  #7B7BA8; --tx4:  #545480;
   --ac1:  #7B6FE8; --ac2:  #C060F0;
   --acs:  rgba(123,111,232,.14); --act: #B0A8FF;
   --re:   #F87171; --res:  rgba(248,113,113,.12); --ret: #FFB8B8;
@@ -175,6 +175,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 /* Nav items */
 .anv { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--tx3); transition: all .14s; user-select: none; }
 .anv:hover { background: var(--sur2); color: var(--tx2); }
+.anv:active { transform: scale(.97); }
 .anv.on    { background: var(--acs); color: var(--act); }
 .anv .cnt  { margin-left: auto; font-size: 11px; background: var(--bg2); color: var(--tx4); padding: 1px 7px; border-radius: 20px; font-weight: 600; }
 .anv.on .cnt { background: var(--acs); color: var(--act); }
@@ -182,6 +183,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 
 /* Buttons */
 .abtn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 15px; border-radius: 10px; font-size: 13.5px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .14s; white-space: nowrap; }
+.abtn:active:not(:disabled) { transform: scale(.96); }
 .abp  { background: linear-gradient(135deg, var(--ac1), var(--ac2)); color: #fff; box-shadow: 0 2px 12px rgba(108,92,231,.35); }
 .abp:hover { filter: brightness(1.1); box-shadow: 0 4px 22px rgba(108,92,231,.55); transform: translateY(-1px); }
 .abp:disabled { opacity: .4; cursor: not-allowed; filter: none; transform: none; }
@@ -191,6 +193,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 .abd:hover { background: rgba(239,68,68,.2); }
 .abic { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; border: none; cursor: pointer; color: var(--tx3); background: transparent; transition: all .14s; }
 .abic:hover { background: var(--sur2); color: var(--tx); }
+.abic:active { transform: scale(.92); }
 
 /* Cards */
 .acard { background: var(--gl); backdrop-filter: blur(16px); border: 1px solid var(--glb); border-radius: 16px; transition: box-shadow .15s ease; }
@@ -229,7 +232,36 @@ select.ainp option { background: var(--sur); color: var(--tx); }
 .atab.on { background: var(--sur); color: var(--tx); box-shadow: var(--s1); }
 
 /* Stats cards */
-.stc { background: var(--gl); backdrop-filter: blur(16px); border: 1px solid var(--glb); border-radius: 14px; padding: 18px 20px; flex: 1; min-width: 110px; }
+.stc { background: var(--gl); backdrop-filter: blur(16px); border: 1px solid var(--glb); border-radius: 14px; padding: 18px 20px; flex: 1; min-width: 110px; transition: transform .15s, box-shadow .15s; }
+.stc:hover { transform: translateY(-2px); box-shadow: var(--s2); }
+
+/* ── Sidebar collapse ──────────────────────────────────────────────────────── */
+.asidebar { transition: width .2s ease, padding .2s ease; }
+.asidebar.collapsed { width: 64px !important; padding-left: 10px; padding-right: 10px; }
+.asidebar.collapsed .anv span,
+.asidebar.collapsed .anv .cnt,
+.asidebar.collapsed .sb-label,
+.asidebar.collapsed .sb-logo-text { display: none; }
+.asidebar.collapsed .anv { justify-content: center; padding: 9px; }
+.asidebar.collapsed .anv svg { flex-shrink: 0; }
+.sb-collapse-btn { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--bd); background: var(--sur2); color: var(--tx3); cursor: pointer; transition: all .14s; flex-shrink: 0; }
+.sb-collapse-btn:hover { background: var(--bd); color: var(--tx); }
+.sb-collapse-btn:active { transform: scale(.9); }
+
+/* ── No-image tag ─────────────────────────────────────────────────────────── */
+.no-img-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--tx4); background: var(--bg2); border: 1px dashed var(--bd2); border-radius: 7px; padding: 3px 8px; }
+
+/* ── Kebab action menu ────────────────────────────────────────────────────── */
+.kebab-menu { position: relative; }
+.kebab-pop { position: absolute; bottom: calc(100% + 8px); right: 0; background: var(--sur); border: 1px solid var(--bd); border-radius: 10px; padding: 6px; min-width: 160px; box-shadow: var(--s3); z-index: 20; display: flex; flex-direction: column; gap: 2px; }
+.kebab-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--tx2); cursor: pointer; transition: background .12s; white-space: nowrap; }
+.kebab-item:hover { background: var(--sur2); }
+.kebab-item.danger { color: var(--re); }
+.kebab-item.danger:hover { background: var(--res); }
+
+/* ── Idle auto-lock overlay ───────────────────────────────────────────────── */
+.idle-warn { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--sur); border: 1px solid var(--am); color: var(--amt); padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; box-shadow: var(--s3); z-index: 300; display: flex; align-items: center; gap: 10px; }
+.idle-warn button { background: var(--ams); color: var(--amt); border: 1px solid var(--am); border-radius: 7px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
 
 /* Util */
 .lbl  { font-size: 10.5px; font-weight: 700; color: var(--tx4); text-transform: uppercase; letter-spacing: .8px; }
