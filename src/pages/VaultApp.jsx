@@ -4,7 +4,7 @@ import {
   Upload, Trash2, Copy, Check, Clock, AlertCircle,
   Loader2, Zap, Share2, Pencil, Bell, ChevronRight,
   CreditCard, Activity, Wallet, Home, Scale,
-  Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe,
+  Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe, LogOut,
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EM }                                   from '../data.js';
@@ -533,7 +533,7 @@ export default function VaultApp({ onBack }) {
           const Ic  = CAT_ICONS[k] ?? FolderOpen;
           const cnt = k === 'all' ? docs.length : docs.filter((d) => d.cat === k).length;
           return (
-            <div key={k} className={`anv${cat === k ? ' on' : ''}`} onClick={() => setCat(k)} title={sbCollapsed ? m.label : undefined}>
+            <div key={k} className={`anv${cat === k ? ' on' : ''}`} onClick={() => setCat(k)} data-tip={sbCollapsed ? m.label : undefined} aria-label={m.label}>
               <Ic size={15} /><span style={{ flex: 1 }}>{m.label}</span>
               <span className="cnt">{cnt}</span>
             </div>
@@ -541,10 +541,10 @@ export default function VaultApp({ onBack }) {
         })}
 
         <div className="divr" />
-        <div className="anv danger" onClick={() => setEmOpen(true)} title={sbCollapsed ? 'Emergency Card' : undefined}>
+        <div className="anv danger" onClick={() => setEmOpen(true)} data-tip={sbCollapsed ? 'Emergency Card' : undefined} aria-label="Emergency Card">
           <Zap size={15} /><span style={{ flex: 1 }}>Emergency Card</span><ChevronRight size={13} />
         </div>
-        <div className="anv" onClick={() => setNotifOpen((o) => !o)} title={sbCollapsed ? 'Alerts' : undefined}>
+        <div className="anv" onClick={() => setNotifOpen((o) => !o)} data-tip={sbCollapsed ? 'Alerts' : undefined} aria-label="Alerts">
           <Bell size={15} /><span style={{ flex: 1 }}>Alerts</span>
           {notifs.length > 0 && (
             <span style={{ background: 'var(--re)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20 }}>
@@ -552,7 +552,7 @@ export default function VaultApp({ onBack }) {
             </span>
           )}
         </div>
-        <div className="anv" onClick={openPinModal} title={sbCollapsed ? 'Change PIN' : undefined}>
+        <div className="anv" onClick={openPinModal} data-tip={sbCollapsed ? 'Change PIN' : undefined} aria-label="Change PIN">
           <Lock size={15} /><span style={{ flex: 1 }}>Change PIN</span>
         </div>
 
@@ -561,35 +561,40 @@ export default function VaultApp({ onBack }) {
 
         {supabaseEnabled && (
           user ? (
-            <div className="anv" style={{ cursor: 'default' }} title={sbCollapsed ? user.email : undefined}>
+            <div
+              className="sb-profile"
+              data-tip={sbCollapsed ? `${user.user_metadata?.full_name || user.email}${syncing ? ' · Syncing…' : ' · Synced'}` : undefined}
+            >
               {user.user_metadata?.avatar_url
-                ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0 }} />
-                : <Globe size={15} />}
-              <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user.email}
-              </span>
-              {syncing
-                ? <Loader2 size={12} className="spin" style={{ color: 'var(--tx3)' }} />
-                : <span title="Synced"><Check size={12} style={{ color: 'var(--gr)' }} /></span>}
+                ? <img className="sb-profile-av" src={user.user_metadata.avatar_url} alt="" />
+                : <div className="sb-profile-av-fallback">{(user.user_metadata?.full_name || user.email || '?')[0].toUpperCase()}</div>}
+              <div className="sb-profile-info">
+                <div className="sb-profile-name">{user.user_metadata?.full_name || 'Signed in'}</div>
+                <div className="sb-profile-email">{user.email}</div>
+              </div>
+              <div
+                className="sb-profile-sync"
+                title={syncing ? 'Syncing…' : 'Synced — click to sign out'}
+                onClick={handleSignOut}
+              >
+                {syncing
+                  ? <Loader2 size={13} className="spin" style={{ color: 'var(--tx3)' }} />
+                  : <LogOut size={13} style={{ color: 'var(--tx3)' }} />}
+              </div>
             </div>
           ) : (
-            <div className="anv" onClick={handleGoogleSignIn} title={sbCollapsed ? 'Sign in with Google' : undefined}>
+            <div className="anv" onClick={handleGoogleSignIn} data-tip={sbCollapsed ? 'Sign in with Google' : undefined} aria-label="Sign in with Google">
               {authBusy ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
               <span style={{ flex: 1 }}>{authBusy ? 'Signing in…' : 'Sign in with Google'}</span>
             </div>
           )
-        )}
-        {user && (
-          <div className="anv" onClick={handleSignOut} title={sbCollapsed ? 'Sign out' : undefined}>
-            <X size={15} /><span style={{ flex: 1, fontSize: 13 }}>Sign Out</span>
-          </div>
         )}
         {syncErr && !sbCollapsed && (
           <p style={{ fontSize: 10.5, color: 'var(--re)', padding: '2px 10px 4px', lineHeight: 1.4 }}>{syncErr}</p>
         )}
 
         {onBack && (
-          <div className="anv" style={{ color: 'var(--tx3)' }} onClick={onBack} title={sbCollapsed ? 'Back to Site' : undefined}>
+          <div className="anv" style={{ color: 'var(--tx3)' }} onClick={onBack} data-tip={sbCollapsed ? 'Back to Site' : undefined} aria-label="Back to Site">
             <ChevronRight size={15} style={{ transform: 'rotate(180deg)' }} />
             <span style={{ flex: 1, fontSize: 13 }}>Back to Site</span>
           </div>
@@ -597,7 +602,8 @@ export default function VaultApp({ onBack }) {
         <div
           className="anv"
           style={{ color: 'var(--tx3)' }}
-          title={sbCollapsed ? 'Lock Vault' : undefined}
+          data-tip={sbCollapsed ? 'Lock Vault' : undefined}
+          aria-label="Lock Vault"
           onClick={() => { setPhase('locked'); setCryptoKey(null); setDocs([]); setImgs({}); }}
         >
           <Lock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Lock Vault</span>

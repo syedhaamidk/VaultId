@@ -208,7 +208,7 @@ export default function LandingPage({ onEnterVault }) {
             VaultID
           </span>
         </div>
-        <p>AES-256-GCM encrypted · Zero-knowledge · Built with ❤️ in Bengaluru</p>
+        <p>AES-256-GCM encrypted · Zero-knowledge · Privacy by design</p>
         <p style={{ marginTop: 8, color: '#252540' }}>
           © 2026 VaultID · Your data never leaves your device without your permission.
         </p>
