@@ -1,7 +1,9 @@
+import { lazy, Suspense } from 'react';
 import { Shield, Sparkles, Zap, Clock, Globe, Lock, ShieldCheck } from 'lucide-react';
-import CardNav    from '../components/CardNav.jsx';
-import SideRays   from '../components/SideRays.jsx';
-import BorderGlow from '../components/BorderGlow.jsx';
+import CardNav from '../components/CardNav.jsx';
+import { Button, Card, Badge, TiltCard, Reveal } from '@chomuiro/saisei/react';
+
+const SideRays = lazy(() => import('../components/SideRays.jsx'));
 import { NAV_ITEMS, FEATS } from '../data.js';
 
 // Map iconName strings from data.js → lucide-react components
@@ -30,7 +32,7 @@ export default function LandingPage({ onEnterVault }) {
   return (
     <div className="site" style={{ minHeight: '100vh' }}>
 
-      {/* ── Navigation ──────────────────────────────────────────────────────── */}
+      {/* ── Navigation (custom GSAP nav — kept, Saisei has no animated nav) ─── */}
       <CardNav
         logo={NavLogo}
         items={NAV_ITEMS}
@@ -38,32 +40,25 @@ export default function LandingPage({ onEnterVault }) {
         ease="power3.out"
       />
 
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
+      {/* ── Hero (WebGL backdrop kept — outside the kit's scope) ─────────────── */}
       <section className="hero">
-        {/* Primary god-ray (top-right, purple/indigo) */}
-        <SideRays
-          rayColor1="#7B6FE8" rayColor2="#C060F0"
-          intensity={2.4} spread={2.4} opacity={0.85}
-          origin="top-right"
-        />
-        {/* Secondary accent ray (bottom-left, teal) */}
-        <SideRays
-          rayColor1="#3B82F6" rayColor2="#34D399"
-          intensity={1.4} spread={1.8} opacity={0.4}
-          origin="bottom-left"
-        />
+        <Suspense fallback={null}>
+          {/* Primary god-ray (top-right, purple/indigo) */}
+          <SideRays
+            rayColor1="#7B6FE8" rayColor2="#C060F0"
+            intensity={2.4} spread={2.4} opacity={0.85}
+            origin="top-right"
+          />
+          {/* Secondary accent ray (bottom-left, teal) */}
+          <SideRays
+            rayColor1="#3B82F6" rayColor2="#34D399"
+            intensity={1.4} spread={1.8} opacity={0.4}
+            origin="bottom-left"
+          />
+        </Suspense>
 
         <div className="hero-content">
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(123,111,232,.14)',
-            border: '1px solid rgba(123,111,232,.3)',
-            borderRadius: 30, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, color: '#B0A8FF', marginBottom: 24,
-          }}>
-            <Shield size={12} />
-            AES-256-GCM · Zero-Knowledge · AI-Powered
-          </div>
+          <Badge tone="accent"><Shield size={12} /> AES-256-GCM · Zero-Knowledge · AI-Powered</Badge>
 
           <h1>
             Store every document.<br />
@@ -76,37 +71,35 @@ export default function LandingPage({ onEnterVault }) {
           </p>
 
           <div className="hero-btns">
-            <button className="land-btn-primary" onClick={onEnterVault}>
+            <Button variant="primary" onClick={onEnterVault}>
               Open Your Vault →
-            </button>
-            <button
-              className="land-btn-ghost"
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => document.querySelector('.feat-section')?.scrollIntoView({ behavior: 'smooth' })}
             >
               See How It Works
-            </button>
+            </Button>
           </div>
         </div>
       </section>
 
       {/* ── Stats bar ───────────────────────────────────────────────────────── */}
-      <div className="stat-bar">
+      <div className="stat-bar" id="security">
         {[
           { Ic: Shield,   t: 'AES-256-GCM Encryption'   },
-          { Ic: Lock,     t: 'PBKDF2 · 100k Iterations' },
+          { Ic: Lock,     t: 'PBKDF2 · 600k Iterations' },
           { Ic: Zap,      t: 'Zero-Knowledge Arch'       },
           { Ic: Sparkles, t: 'AI Document Scanning'      },
         ].map(({ Ic, t }) => (
-          <div key={t} className="stat-item">
-            <Ic size={14} />{t}
-          </div>
+          <Badge key={t}><Ic size={12} /> {t}</Badge>
         ))}
       </div>
 
       {/* ── Features ────────────────────────────────────────────────────────── */}
-      <div className="feat-section">
+      <div className="feat-section" id="features">
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <p className="section-label">Why VaultID</p>
+          <span className="sheet-label" style={{ textAlign: 'center' }}>Why VaultID</span>
           <h2 className="section-title">
             Everything you need.<br />
             <span className="gtext">Nothing you don't.</span>
@@ -118,49 +111,31 @@ export default function LandingPage({ onEnterVault }) {
         </div>
 
         <div className="feat-grid">
-          {FEATS.map(({ iconName, title, desc, col, cols, glow }) => {
+          {FEATS.map(({ iconName, title, desc, col }, i) => {
             const Ic = ICON_MAP[iconName] ?? Shield;
             return (
-              <BorderGlow
-                key={title}
-                glowColor={glow}
-                colors={cols}
-                backgroundColor="#0F0F1C"
-                borderRadius={20}
-                glowRadius={44}
-                glowIntensity={1.1}
-                fillOpacity={0.4}
-              >
-                <div style={{ padding: 28 }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 12,
-                    background: `${col}18`, border: `1px solid ${col}30`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: col, marginBottom: 18,
-                  }}>
-                    <Ic size={22} />
-                  </div>
-                  <h3 style={{
-                    margin: '0 0 10px', fontSize: 17, fontWeight: 700,
-                    color: '#EEEEFF', fontFamily: "'Space Grotesk', sans-serif",
-                    letterSpacing: '-.3px',
-                  }}>
-                    {title}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: 13.5, color: '#7878A0', lineHeight: 1.65 }}>
-                    {desc}
-                  </p>
-                </div>
-              </BorderGlow>
+              <Reveal key={title} delay={i * 80}>
+                <TiltCard max={6}>
+                  <Card tag={`// FEAT-0${i + 1}`} title={title} corners>
+                    <div className="avatar" style={{
+                      width: 44, height: 44, background: `${col}18`,
+                      borderColor: `${col}55`, color: col, marginBottom: 18,
+                    }}>
+                      <Ic size={22} />
+                    </div>
+                    <p className="text-soft text-sm" style={{ margin: 0 }}>{desc}</p>
+                  </Card>
+                </TiltCard>
+              </Reveal>
             );
           })}
         </div>
       </div>
 
       {/* ── How it works ────────────────────────────────────────────────────── */}
-      <div className="how-section">
+      <div className="how-section" id="how-it-works">
         <div className="how-inner">
-          <p className="section-label">How It Works</p>
+          <span className="sheet-label">How It Works</span>
           <h2 className="section-title">
             Three steps to a<br />
             <span className="gtext">secure vault.</span>
@@ -168,14 +143,16 @@ export default function LandingPage({ onEnterVault }) {
           <div className="how-steps">
             {[
               { n: '01', t: 'Set your PIN',        d: 'Your PIN drives PBKDF2 to derive an AES-256 key. It never leaves your device — not even in memory after you lock.',          col: '#7B6FE8' },
-              { n: '02', t: 'Add documents',       d: "Drop a photo or PDF — Claude's AI reads it and extracts the document type, number, issuer, and expiry dates instantly.",      col: '#C060F0' },
+              { n: '02', t: 'Add documents',       d: "Upload a photo — Groq's vision model reads it and extracts the document type, number, issuer, and expiry dates instantly.",      col: '#C060F0' },
               { n: '03', t: 'Access anywhere',     d: 'Encrypted vault loads on any device. Optionally sync via Supabase — zero-knowledge, because the server only sees ciphertext.', col: '#34D399' },
-            ].map(({ n, t, d, col }) => (
-              <div key={n} className="how-step">
-                <div className="how-num" style={{ color: `${col}40` }}>{n}</div>
-                <h4>{t}</h4>
-                <p>{d}</p>
-              </div>
+            ].map(({ n, t, d, col }, i) => (
+              <Reveal key={n} delay={i * 100}>
+                <div className="how-step">
+                  <div className="how-num" style={{ color: `${col}40` }}>{n}</div>
+                  <h4>{t}</h4>
+                  <p>{d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -183,19 +160,21 @@ export default function LandingPage({ onEnterVault }) {
 
       {/* ── CTA ─────────────────────────────────────────────────────────────── */}
       <div className="cta-section">
-        <div className="cta-icon gbg">
-          <ShieldCheck size={30} color="#fff" />
-        </div>
-        <h2>
-          Ready to secure your<br />
-          <span className="gtext">documents?</span>
-        </h2>
-        <p>
-          Start today — it's free, local-first, and takes under a minute to set up.
-        </p>
-        <button className="land-btn-primary" onClick={onEnterVault}>
-          Open Your Vault — It's Free →
-        </button>
+        <Reveal>
+          <div className="cta-icon gbg">
+            <ShieldCheck size={30} color="#fff" />
+          </div>
+          <h2>
+            Ready to secure your<br />
+            <span className="gtext">documents?</span>
+          </h2>
+          <p>
+            Start today — it's free, local-first, and takes under a minute to set up.
+          </p>
+          <Button variant="primary" onClick={onEnterVault}>
+            Open Your Vault — It's Free →
+          </Button>
+        </Reveal>
       </div>
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
@@ -209,6 +188,9 @@ export default function LandingPage({ onEnterVault }) {
           </span>
         </div>
         <p>AES-256-GCM encrypted · Zero-knowledge · Privacy by design</p>
+        <p>
+          <Badge>Built with Saisei</Badge>
+        </p>
         <p style={{ marginTop: 8, color: '#252540' }}>
           © 2026 VaultID · Your data never leaves your device without your permission.
         </p>

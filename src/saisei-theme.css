@@ -1,0 +1,37 @@
+/* VaultID brand skin over Saisei tokens — the only file a re-skin touches.
+   Dark-first: the app locks data-theme="dark" in main.jsx. Import order:
+   blueprint.css → saisei-theme.css → index.css (page layout stays custom). */
+:root {
+  --paper: #FFFFFF;
+  --paper-alt: #F3F3FA;
+  --ink: #14142B;
+  --ink-soft: #55556E;
+  --line: #D9D9E8;
+  --line-strong: #A3A3C4;
+  --accent: #5B50D8;
+  --accent-hover: #7B6FE8;
+  --accent-ink: #FFFFFF;
+  --accent-tint: rgba(91, 80, 216, 0.08);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --grid: rgba(91, 80, 216, 0.05);
+}
+
+[data-theme="dark"] {
+  --paper: #0A0A14;
+  --paper-alt: #12121E;
+  --ink: #EEEEFF;
+  --ink-soft: #A7A7C8;
+  --line: #262640;
+  --line-strong: #4A4A6A;
+  --accent: #7B6FE8;
+  --accent-hover: #8F83F0;
+  --accent-ink: #FFFFFF;
+  --accent-tint: rgba(123, 111, 232, 0.12);
+  --grid: rgba(123, 111, 232, 0.06);
+}

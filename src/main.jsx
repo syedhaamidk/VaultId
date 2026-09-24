@@ -1,7 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import '@chomuiro/saisei/dist/blueprint.css';
+import './saisei-theme.css';
 import './index.css';
+
+// VaultID is a dark-first brand: lock the Saisei theme to dark.
+document.documentElement.dataset.theme = 'dark';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
