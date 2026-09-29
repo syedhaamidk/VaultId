@@ -8,22 +8,18 @@ import {
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon, compressImage } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
-import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote } from '../crypto.js';
+import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote, logAudit, getAuditLog } from '../crypto.js';
 import { syncVault } from '../sync.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
 import { scanOnDevice } from '../utils/onDeviceScan.js';
-import { logAudit, getAuditLog } from '../crypto.js';
-import {
-  supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
-  onAuthChange, pushVault, pullVault,
-} from '../sync.js';
+import LockScreen from '../components/vault/LockScreen.jsx';
+import Sidebar from '../components/vault/Sidebar.jsx';
+import DocumentCard from '../components/vault/DocumentCard.jsx';
+import DocumentModal from '../components/vault/DocumentModal.jsx';
+import { AddDocumentModal, EmergencyModal, ChangePinModal, UpgradePrompt, ScanConsent, AuditLogModal } from '../components/vault/Modals.jsx';
 
 // ── AI document scanner ────────────────────────────────────────────────────────
-// The actual Groq call + API key live server-side in /api/scan.js (Vercel
-// serverless function). The browser only ever sends the image and gets back
-// parsed fields — it never sees, holds, or can extract the Groq key.
 async function scanDocumentWithAI(file) {
-  // Build base64 data URL
   const b64 = await new Promise((res, rej) => {
     const r = new FileReader();
     r.onload  = () => res(r.result.split(',')[1]);
@@ -51,12 +47,10 @@ async function scanDocumentWithAI(file) {
 }
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
-const CLIPBOARD_CLEAR_MS = 30_000;
-// Lock if the tab has been hidden this long. Not immediate: mobile file/camera
-// pickers and OS share sheets briefly hide the page mid-flow.
-const HIDDEN_LOCK_MS = 60_000;
 const MAX_IMAGE_BYTES = 2_500_000;
 const MAX_IMAGE_LABEL = '2.5 MB';
+const CLIPBOARD_CLEAR_MS = 30_000;
+const HIDDEN_LOCK_MS = 60_000;
 const EMPTY_FORM = {
   name: '', cat: 'identity', num: '', by: '', issued: '', expires: '', notes: '',
 };
@@ -204,8 +198,7 @@ export default function VaultApp({ onBack }) {
   }, []);
 
   // If an account becomes known while a local vault is already open, check
-  // the cloud before allowing any local write. A remote row is never silently
-  // overwritten by a device-local vault.
+  // the cloud before allowing any local write.
   useEffect(() => {
     if (!user || !supabaseEnabled || phase !== 'open' || cloudReadyRef.current) return;
     let cancelled = false;
@@ -287,8 +280,7 @@ export default function VaultApp({ onBack }) {
     };
   }, [docView, addOpen, emOpen, pinModal]);
 
-  // Generate the emergency QR locally. No medical/contact data is sent to a
-  // third-party QR service.
+  // Generate the emergency QR locally.
   useEffect(() => {
     let cancelled = false;
     setQrDataUrl(null);
@@ -344,7 +336,6 @@ export default function VaultApp({ onBack }) {
     setAuthBusy(true); setSyncErr(null);
     try {
       await signInWithGoogle();
-      // Browser redirects for OAuth — execution typically doesn't continue past here.
     } catch (e) {
       setSyncErr(e.message === 'SUPABASE_NOT_CONFIGURED'
         ? 'Cloud sync isn\'t configured yet — add VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY to .env'
@@ -385,9 +376,6 @@ export default function VaultApp({ onBack }) {
   }
 
   // ── Auto-lock on idle ───────────────────────────────────────────────────────
-  // Warn at 4 min idle, lock at 5 min. Resets on any mouse/keyboard/touch
-  // activity. Only runs while the vault is unlocked — a left-open device
-  // with sensitive docs visible is the realistic risk this addresses.
   useEffect(() => {
     if (phase !== 'open') return;
 
@@ -416,8 +404,6 @@ export default function VaultApp({ onBack }) {
   }, [phase]);
 
   // ── Lock after the tab has been hidden a while ────────────────────────────
-  // Background timers are throttled, so compare timestamps on return rather
-  // than trusting a setTimeout that may not have fired.
   useEffect(() => {
     if (phase !== 'open') return;
     hiddenAtRef.current = null;
@@ -442,10 +428,7 @@ export default function VaultApp({ onBack }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Unlock ─────────────────────────────────────────────────────────────────
-  // Prefer the cloud copy when the account is known, but never overwrite a
-  // device that contains unsynced local changes. Uses the syncVault conflict
-  // matrix to determine the correct action for each local × remote combination.
+  // ── PIN ───────────────────────────────────────────────────────────────────
   async function resolveUnlock(np) {
     const fallbackDocs = DEMO_MODE ? DOCS0 : [];
 
@@ -462,7 +445,6 @@ export default function VaultApp({ onBack }) {
       }
 
       if (remote.found) {
-        // Determine local vault info for the conflict matrix.
         const localVersion = getVaultVersion();
         const localBlob = exportLocalBlob();
         const localInfo = {
@@ -481,7 +463,6 @@ export default function VaultApp({ onBack }) {
         const { action } = syncVault(localInfo, remoteInfo);
 
         if (action === 'keep-local') {
-          // Never overwrite unsynced local data.
           cloudReadyRef.current = false;
           setSyncBlocked(true);
           setSyncErr('This device has unsynced changes. The cloud vault was not overwritten.');
@@ -489,7 +470,6 @@ export default function VaultApp({ onBack }) {
         }
 
         if (action === 'upgrade') {
-          // v1 device, v2 remote — prompt to upgrade.
           cloudReadyRef.current = false;
           setSyncBlocked(true);
           setSyncErr('A newer vault format is available. Upgrade this device to sync.');
@@ -497,14 +477,12 @@ export default function VaultApp({ onBack }) {
         }
 
         if (action === 'warn-stale-v1') {
-          // v2 device, v1 remote with newer data — don't overwrite.
           cloudReadyRef.current = false;
           setSyncBlocked(true);
           setSyncErr('A device with the old format has newer data. Upgrade that device to sync.');
           return tryUnlock(np, fallbackDocs, initialEmergency());
         }
 
-        // action === 'pull' — unlock from the remote.
         if (remote.version === 'v2') {
           const result = await tryUnlockV2FromRemote(np, remote.blob);
           if (result.ok) {
@@ -515,7 +493,6 @@ export default function VaultApp({ onBack }) {
           return result;
         }
 
-        // v1 remote.
         const remoteBlob = {
           saltB64: remote.blob.saltB64,
           enc: remote.blob.encBlob,
@@ -562,7 +539,6 @@ export default function VaultApp({ onBack }) {
         setUnlockOk(true);
         pinRef.current = np;
         logAudit('unlock', 'PIN');
-        // Offer the v1 → v2 upgrade after a successful v1 unlock.
         if (vaultVersion === 'v1') setShowUpgradePrompt(true);
         setTimeout(() => { setPhase('open'); setPin(''); setUnlockOk(false); }, 550);
       } else {
@@ -614,7 +590,6 @@ export default function VaultApp({ onBack }) {
       setEmDraft(cloneEmergency(res.emergency || initialEmergency()));
       setUnlockOk(true);
       logAudit('unlock', 'passphrase');
-      // Clear the v1 backup on a successful v2 unlock in a fresh session.
       if (hasV1Backup()) clearV1Backup();
       setTimeout(() => { setPhase('open'); setUnlockOk(false); }, 550);
     } else {
@@ -665,29 +640,9 @@ export default function VaultApp({ onBack }) {
       };
     };
 
-    // Serialize writes so rapid edits cannot finish out of order and leave the
-    // cloud with an older snapshot than localStorage.
     const next = persistQueueRef.current.then(run, run);
     persistQueueRef.current = next.catch(() => {});
     return next;
-  }
-
-  // ── Clipboard auto-clear ──────────────────────────────────────────────────
-  // Best-effort: browsers only allow writeText while the page is focused, so
-  // this can silently fail if the user has switched away. lockVault() also
-  // triggers an immediate attempt. It overwrites unconditionally — reading the
-  // clipboard first would need an extra permission prompt.
-  function clearClipboardNow() {
-    clearTimeout(clipboardTimer.current);
-    clipboardTimer.current = null;
-    if (!clipboardDirty.current) return;
-    clipboardDirty.current = false;
-    navigator.clipboard?.writeText('').catch(() => {});
-  }
-  function scheduleClipboardClear() {
-    clipboardDirty.current = true;
-    clearTimeout(clipboardTimer.current);
-    clipboardTimer.current = setTimeout(clearClipboardNow, CLIPBOARD_CLEAR_MS);
   }
 
   // ── Copy number ───────────────────────────────────────────────────────────
@@ -707,7 +662,6 @@ export default function VaultApp({ onBack }) {
 
   // ── File handling ─────────────────────────────────────────────────────────
   function handleFile(f) {
-    // Groq vision only supports images (not PDFs)
     const validImages = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     const isPDF       = f.type === 'application/pdf';
 
@@ -725,12 +679,10 @@ export default function VaultApp({ onBack }) {
     }
     setFile(f); setAErr(null);
 
-    // Show preview
     const reader = new FileReader();
     reader.onload = (e) => setFilePrev(e.target.result);
     reader.readAsDataURL(f);
 
-    // Show consent dialog before scanning.
     setPendingScanFile(f);
     setShowScanConsent(true);
   }
@@ -806,6 +758,7 @@ export default function VaultApp({ onBack }) {
     setPinChBusy(false);
     setPinModal(false);
     setPinOld(''); setPinNew(''); setPinNew2('');
+    logAudit('pin_change');
     const cloudConfigured = Boolean(user && supabaseEnabled);
     showToast(
       !cloudConfigured ? 'PIN changed locally' : cloud.ok ? 'PIN changed and synced' : 'PIN changed locally; cloud sync failed',
@@ -823,7 +776,6 @@ export default function VaultApp({ onBack }) {
     setShowPassphraseSetup(false);
 
     if (vaultVersion === 'none') {
-      // New vault.
       const r = await createVaultV2(passphrase, [], {}, {});
       if (r.ok) {
         setCryptoKey(r.key);
@@ -836,7 +788,6 @@ export default function VaultApp({ onBack }) {
         showToast('Could not create vault', 'err');
       }
     } else if (vaultVersion === 'v1') {
-      // Upgrade from v1 — uses the saved PIN to re-unlock and verify.
       const r = await upgradeV1ToV2(pinRef.current, passphrase);
       if (r.ok) {
         setCryptoKey(r.key);
@@ -935,9 +886,6 @@ export default function VaultApp({ onBack }) {
     const dataUrl = imgs[doc.id];
     if (!dataUrl) return showToast('No image attached to this document', 'err');
     try {
-      // jsPDF is an npm dependency, loaded lazily so it stays out of the main
-      // bundle (Vite code-splits it). Never load it from a CDN: this runs in
-      // the unlocked vault context, so third-party code here can read every doc.
       const { jsPDF } = await import('jspdf');
       const img = new Image();
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
@@ -960,7 +908,6 @@ export default function VaultApp({ onBack }) {
     }
   }
 
-
   async function saveDoc() {
     if (!nd.name.trim() || !nd.num.trim() || mutationBusyRef.current) return;
 
@@ -978,18 +925,16 @@ export default function VaultApp({ onBack }) {
       const newDocs = editingId
         ? docs.map((doc) => {
             if (doc.id !== id) return doc;
-            // Push the current state to versions before overwriting.
             const versions = Array.isArray(doc.versions) ? [...doc.versions] : [];
             versions.unshift({
               ts: new Date().toISOString(),
               name: doc.name, num: doc.num, by: doc.by, cat: doc.cat,
               issued: doc.issued, expires: doc.expires, notes: doc.notes,
             });
-            while (versions.length > 5) versions.pop(); // cap at 5 versions
+            while (versions.length > 5) versions.pop();
             return { ...doc, ...cleanDoc, versions };
           })
         : [...docs, { ...cleanDoc, id, versions: [] }];
-      // Compress the image before storing (saves localStorage quota).
       const compressedImg = file ? await compressImage(file) : null;
       const newImgs = compressedImg ? { ...imgs, [id]: compressedImg } : imgs;
       const result = await persist(newDocs, newImgs);
@@ -1113,6 +1058,20 @@ export default function VaultApp({ onBack }) {
     }
   }
 
+  // ── Clipboard auto-clear ──────────────────────────────────────────────────
+  function clearClipboardNow() {
+    clearTimeout(clipboardTimer.current);
+    clipboardTimer.current = null;
+    if (!clipboardDirty.current) return;
+    clipboardDirty.current = false;
+    navigator.clipboard?.writeText('').catch(() => {});
+  }
+  function scheduleClipboardClear() {
+    clipboardDirty.current = true;
+    clearTimeout(clipboardTimer.current);
+    clipboardTimer.current = setTimeout(clearClipboardNow, CLIPBOARD_CLEAR_MS);
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const filtered = docs.filter((d) => {
     if (cat !== 'all' && d.cat !== cat) return false;
@@ -1151,290 +1110,73 @@ export default function VaultApp({ onBack }) {
   // LOCK SCREEN
   // ═══════════════════════════════════════════════════════════════════════════
   if (phase !== 'open') return (
-    <div
-      className="app"
-      data-t={theme}
-      style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', position: 'relative', overflow: 'hidden' }}
-    >
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, background: 'radial-gradient(circle, var(--acs) 0%, transparent 65%)', pointerEvents: 'none' }} />
-
-      <button className="abic" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setDark((d) => !d)} style={{ position: 'absolute', top: 16, right: 16, background: 'var(--gl)', backdropFilter: 'blur(12px)', border: '1px solid var(--glb)', borderRadius: 10 }}>
-        {dark ? <Sun size={15} /> : <Moon size={15} />}
-      </button>
-      {onBack && (
-        <button
-          className="abic"
-          onClick={onBack}
-          style={{ position: 'absolute', top: 16, left: 16, background: 'var(--gl)', backdropFilter: 'blur(12px)', border: '1px solid var(--glb)', borderRadius: 10, width: 'auto', padding: '6px 12px', gap: 5, color: 'var(--tx3)', fontSize: 12, display: 'flex', alignItems: 'center' }}
-        >
-          <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} /> Site
-        </button>
-      )}
-
-      <div className="acard fl" style={{ padding: '44px 52px', textAlign: 'center', minWidth: 360, boxShadow: 'var(--s4)' }}>
-        <div style={{ position: 'relative', width: 76, height: 76, margin: '0 auto 22px' }}>
-          <div className="pu" style={{ position: 'absolute', top: -12, right: -12, bottom: -12, left: -12, borderRadius: '50%', border: '2px solid var(--ac1)', opacity: 0.6 }} />
-          <div style={{ width: 76, height: 76, borderRadius: '50%', background: 'var(--acs)', border: '2px solid var(--ac1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: unlockOk ? 'var(--gr)' : 'var(--act)', transition: 'color .3s' }}>
-            {phase === 'unlocking' ? <Loader2 size={32} className="spin" /> : unlockOk ? <Check size={32} /> : <ShieldCheck size={32} />}
-          </div>
-        </div>
-
-        <h1 className="gtext" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-.5px', margin: '0 0 5px', fontFamily: "'Space Grotesk', sans-serif" }}>VaultID</h1>
-        <p style={{ fontSize: 13, color: 'var(--tx3)', margin: '0 0 28px' }}>
-          {phase === 'boot' ? 'Loading…' : phase === 'unlocking' ? 'Deriving key…' : vaultVersion === 'v2' ? 'Enter passphrase to unlock' : 'Enter PIN to unlock'}
-        </p>
-
-        {/* v2: passphrase field */}
-        {phase !== 'boot' && vaultVersion === 'v2' && (
-          <>
-            <div style={{ marginBottom: 28 }}>
-              <input
-                type="password"
-                className="ainp"
-                placeholder="Enter passphrase"
-                value={passphraseInput}
-                onChange={(e) => setPassphraseInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handlePassphraseSubmit(); }}
-                autoComplete="current-password"
-                aria-label="Passphrase"
-                style={{ width: '100%', textAlign: 'center', letterSpacing: 2, fontFamily: "'JetBrains Mono', monospace" }}
-              />
-            </div>
-            {unlockErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>{unlockErr}</p>}
-            {unlockOk && <p role="status" aria-live="polite" style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-              <span className="sbadge"><Shield size={10} />AES-256-GCM · Passphrase</span>
-            </div>
-          </>
-        )}
-
-        {/* v1: PIN keypad (existing) */}
-        {phase !== 'boot' && vaultVersion === 'v1' && (
-          <>
-            <div
-              className={pinErr ? 'shk' : ''}
-              style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}
-              role="status"
-              aria-label={`${pin.length} of ${PIN_LEN} digits entered`}
-              aria-live="polite"
-            >
-              {Array.from({ length: PIN_LEN }).map((_, i) => (
-                <div key={i} style={{ width: 13, height: 13, borderRadius: 4, background: pin.length > i ? 'var(--ac1)' : 'var(--bd2)', transition: 'all .15s', boxShadow: pin.length > i ? '0 0 12px var(--ac1)' : undefined }} />
-              ))}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: 10, justifyContent: 'center' }}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                <button key={n} className="nk" aria-label={`Enter ${n}`} onClick={() => pressKey(String(n))}>{n}</button>
-              ))}
-              <div />
-              <button className="nk" aria-label="Enter 0" onClick={() => pressKey('0')}>0</button>
-              <button className="nk" aria-label="Delete last digit" style={{ fontSize: 16 }} onClick={() => setPin((p) => p.slice(0, -1))}>⌫</button>
-            </div>
-
-            {lockedOut && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Too many attempts — try again in {lockRemain}s</p>}
-            {!lockedOut && pinErr   && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>Incorrect PIN — try again</p>}
-            {!lockedOut && unlockErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>{unlockErr}</p>}
-            {unlockOk && <p role="status" aria-live="polite" style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
-
-            {DEMO_MODE && (
-              <p style={{ color: 'var(--tx4)', fontSize: 11, marginTop: 20 }}>
-                Demo PIN: <code style={{ color: 'var(--act)', fontFamily: "'JetBrains Mono', monospace" }}>{DEMO_PIN}</code>
-              </p>
-            )}
-            {vaultVersion === 'v1' && (
-              <p style={{ color: 'var(--am)', fontSize: 11, marginTop: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                <AlertTriangle size={12} />PIN security is limited — upgrade to a passphrase for stronger protection.
-              </p>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-              <span className="sbadge"><Shield size={10} />AES-256-GCM · Groq AI</span>
-            </div>
-          </>
-        )}
-
-        {/* new vault: prompt to create a passphrase */}
-        {phase !== 'boot' && vaultVersion === 'none' && (
-          <div style={{ marginTop: 8 }}>
-            <button className="abtn abp" onClick={() => setShowPassphraseSetup(true)}>
-              Create Passphrase
-            </button>
-          </div>
-        )}
-      </div>
-
-      {supabaseEnabled && (
-        <div style={{ marginTop: 18, textAlign: 'center', maxWidth: 420, width: 'calc(100% - 32px)' }}>
-          {user ? (
-            <p style={{ color: 'var(--tx3)', fontSize: 12 }}>
-              Cloud account connected: {user.email || user.user_metadata?.full_name || 'signed in'}
-            </p>
-          ) : (
-            <button className="abtn abg" type="button" onClick={handleGoogleSignIn} disabled={authBusy}>
-              {authBusy ? <Loader2 size={14} className="spin" /> : <Globe size={14} />}
-              {authBusy ? 'Signing in…' : 'Sign in with Google to restore cloud vault'}
-            </button>
-          )}
-          {syncErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 11, marginTop: 8 }}>{syncErr}</p>}
-        </div>
-      )}
-    </div>
+    <LockScreen
+      phase={phase}
+      dark={dark}
+      setDark={setDark}
+      onBack={onBack}
+      vaultVersion={vaultVersion}
+      pin={pin}
+      setPin={setPin}
+      pinErr={pinErr}
+      unlockErr={unlockErr}
+      unlockOk={unlockOk}
+      lockedOut={lockedOut}
+      lockRemain={lockRemain}
+      pressKey={pressKey}
+      passphraseInput={passphraseInput}
+      setPassphraseInput={setPassphraseInput}
+      handlePassphraseSubmit={handlePassphraseSubmit}
+      showPassphraseSetup={showPassphraseSetup}
+      setShowPassphraseSetup={setShowPassphraseSetup}
+      supabaseEnabled={supabaseEnabled}
+      user={user}
+      authBusy={authBusy}
+      handleGoogleSignIn={handleGoogleSignIn}
+      syncErr={syncErr}
+      DEMO_MODE={DEMO_MODE}
+      DEMO_PIN={DEMO_PIN}
+      PIN_LEN={PIN_LEN}
+    />
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // MAIN APP
   // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="app" data-t={theme} style={{ height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--bg)', color: 'var(--tx)' }}>
+    <div className="app" data-t={theme} style={{ height: '100vh', display: 'flex', overflow: 'hidden', background: 'var(--bg)', color: 'var(--tx)' }} id="main-content">
 
-      {/* ── SIDEBAR ── */}
-      <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={{ width: sbCollapsed ? 64 : 215, background: 'var(--gl)', backdropFilter: 'blur(20px)', borderRight: '1px solid var(--bd)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto' }}>
-        <div style={{ padding: '8px 10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <ShieldCheck size={17} color="#fff" />
-          </div>
-          <span className="gtext sb-logo-text" style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", flex: 1 }}>VaultID</span>
-          {!sbCollapsed && (
-            <button className="sb-collapse-btn" onClick={() => setSbCollapsed(true)} title="Collapse sidebar">
-              <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} />
-            </button>
-          )}
-        </div>
-        {sbCollapsed && (
-          <button className="sb-collapse-btn" style={{ margin: '0 auto 10px' }} onClick={() => setSbCollapsed(false)} title="Expand sidebar">
-            <ChevronRight size={13} />
-          </button>
-        )}
-
-        <p className="lbl sb-label" style={{ padding: '0 10px 6px' }}>Library</p>
-        {Object.entries(VAULT_CAT).map(([k, m]) => {
-          const Ic  = CAT_ICONS[k] ?? FolderOpen;
-          const cnt = k === 'all' ? docs.length : docs.filter((d) => d.cat === k).length;
-          return (
-            <button
-              type="button"
-              key={k}
-              className={`anv${cat === k ? ' on' : ''}`}
-              onClick={() => setCat(k)}
-              data-tip={sbCollapsed ? m.label : undefined}
-              aria-label={m.label}
-              aria-pressed={cat === k}
-            >
-              <Ic size={15} /><span style={{ flex: 1 }}>{m.label}</span>
-              <span className="cnt">{cnt}</span>
-            </button>
-          );
-        })}
-
-        <div className="divr" />
-        <button type="button" className="anv danger" onClick={openEmergency} data-tip={sbCollapsed ? 'Emergency Card' : undefined} aria-label="Emergency Card">
-          <Zap size={15} /><span style={{ flex: 1 }}>Emergency Card</span><ChevronRight size={13} />
-        </button>
-        <button type="button" className="anv" onClick={() => setNotifOpen((o) => !o)} data-tip={sbCollapsed ? 'Alerts' : undefined} aria-label="Alerts" aria-expanded={notifOpen}>
-          <Bell size={15} /><span style={{ flex: 1 }}>Alerts</span>
-          {notifs.length > 0 && (
-            <span style={{ background: 'var(--re)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20 }}>
-              {notifs.length}
-            </span>
-          )}
-        </button>
-        <button type="button" className="anv" onClick={openPinModal} data-tip={sbCollapsed ? 'Change PIN' : undefined} aria-label="Change PIN">
-          <Lock size={15} /><span style={{ flex: 1 }}>Change PIN</span>
-        </button>
-
-        <div style={{ flex: 1 }} />
-        <div className="divr" />
-
-        {supabaseEnabled && (
-          user ? (
-            <div
-              className="sb-profile"
-              data-tip={sbCollapsed ? `${user.user_metadata?.full_name || user.email}${syncing ? ' · Syncing…' : ' · Synced'}` : undefined}
-            >
-              {user.user_metadata?.avatar_url
-                ? <img className="sb-profile-av" src={user.user_metadata.avatar_url} alt="" />
-                : <div className="sb-profile-av-fallback">{(user.user_metadata?.full_name || user.email || '?')[0].toUpperCase()}</div>}
-              <div className="sb-profile-info">
-                <div className="sb-profile-name">{user.user_metadata?.full_name || 'Signed in'}</div>
-                <div className="sb-profile-email">{user.email}</div>
-              </div>
-              <button
-                type="button"
-                className="sb-profile-sync"
-                title={syncing ? 'Syncing…' : 'Synced — click to sign out'}
-                aria-label="Sign out"
-                onClick={handleSignOut}
-              >
-                {syncing
-                  ? <Loader2 size={13} className="spin" style={{ color: 'var(--tx3)' }} />
-                  : <LogOut size={13} style={{ color: 'var(--tx3)' }} />}
-              </button>
-            </div>
-          ) : (
-            <button type="button" className="anv" onClick={handleGoogleSignIn} data-tip={sbCollapsed ? 'Sign in with Google' : undefined} aria-label="Sign in with Google" disabled={authBusy}>
-              {authBusy ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
-              <span style={{ flex: 1 }}>{authBusy ? 'Signing in…' : 'Sign in with Google'}</span>
-            </button>
-          )
-        )}
-        {syncErr && !sbCollapsed && (
-          <p style={{ fontSize: 10.5, color: 'var(--re)', padding: '2px 10px 4px', lineHeight: 1.4 }}>{syncErr}</p>
-        )}
-
-        {onBack && (
-          <button type="button" className="anv" style={{ color: 'var(--tx3)' }} onClick={onBack} data-tip={sbCollapsed ? 'Back to Site' : undefined} aria-label="Back to Site">
-            <ChevronRight size={15} style={{ transform: 'rotate(180deg)' }} />
-            <span style={{ flex: 1, fontSize: 13 }}>Back to Site</span>
-          </button>
-        )}
-        <button
-          type="button"
-          className="anv"
-          style={{ color: 'var(--tx3)' }}
-          data-tip={sbCollapsed ? 'Audit log' : undefined}
-          aria-label="Audit log"
-          onClick={() => setShowAuditLog(true)}
-        >
-          <Clock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Audit Log</span>
-        </button>
-        <button
-          type="button"
-          className="anv"
-          style={{ color: 'var(--tx3)' }}
-          data-tip={sbCollapsed ? 'Export vault' : undefined}
-          aria-label="Export vault"
-          onClick={exportVault}
-        >
-          <Download size={15} /><span style={{ flex: 1, fontSize: 13 }}>Export</span>
-        </button>
-        <button
-          type="button"
-          className="anv"
-          style={{ color: 'var(--tx3)' }}
-          data-tip={sbCollapsed ? 'Import vault' : undefined}
-          aria-label="Import vault"
-          onClick={() => document.getElementById('import-file-input')?.click()}
-        >
-          <Upload size={15} /><span style={{ flex: 1, fontSize: 13 }}>Import</span>
-        </button>
-        <input
-          id="import-file-input"
-          type="file"
-          accept=".json,application/json"
-          style={{ display: 'none' }}
-          onChange={(e) => { if (e.target.files[0]) importVault(e.target.files[0]); e.target.value = ''; }}
-        />
-        <button
-          type="button"
-          className="anv"
-          style={{ color: 'var(--tx3)' }}
-          data-tip={sbCollapsed ? 'Lock Vault' : undefined}
-          aria-label="Lock Vault"
-          onClick={lockVault}
-        >
-          <Lock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Lock Vault</span>
-        </button>
-      </aside>
+      <Sidebar
+        sbCollapsed={sbCollapsed}
+        setSbCollapsed={setSbCollapsed}
+        cat={cat}
+        setCat={setCat}
+        docs={docs}
+        onEmergency={openEmergency}
+        onAlerts={() => setNotifOpen((o) => !o)}
+        notifOpen={notifOpen}
+        notifs={notifs}
+        onPinChange={openPinModal}
+        onExport={exportVault}
+        onImport={() => document.getElementById('import-file-input')?.click()}
+        onAuditLog={() => setShowAuditLog(true)}
+        onLock={lockVault}
+        onBack={onBack}
+        user={user}
+        authBusy={authBusy}
+        onGoogleSignIn={handleGoogleSignIn}
+        onSignOut={handleSignOut}
+        syncing={syncing}
+        syncErr={syncErr}
+        supabaseEnabled={supabaseEnabled}
+      />
+      <input
+        id="import-file-input"
+        type="file"
+        accept=".json,application/json"
+        style={{ display: 'none' }}
+        onChange={(e) => { if (e.target.files[0]) importVault(e.target.files[0]); e.target.value = ''; }}
+      />
 
       {/* ── MAIN COLUMN ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1453,7 +1195,7 @@ export default function VaultApp({ onBack }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div className="srch top-s">
               <Search size={14} />
-              <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search documents" />
             </div>
             <button className="abic" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setDark((d) => !d)} style={{ border: '1px solid var(--bd)' }}>
               {dark ? <Sun size={15} /> : <Moon size={15} />}
@@ -1474,7 +1216,7 @@ export default function VaultApp({ onBack }) {
                 { l: 'Total Documents', v: stats.total,   cl: 'var(--tx)',  b: 'var(--glb)' },
                 { l: 'Expiring Soon',   v: stats.soon,    cl: 'var(--am)',  b: stats.soon    ? 'var(--am)' : 'var(--glb)' },
                 { l: 'Expired',         v: stats.expired, cl: 'var(--re)',  b: stats.expired ? 'var(--re)' : 'var(--glb)' },
-                { l: 'Encrypted 🔐',   v: 'On',          cl: 'var(--gr)',  b: 'var(--gr)'  },
+                { l: 'Encrypted',       v: 'On',          cl: 'var(--gr)',  b: 'var(--gr)'  },
               ].map((s) => (
                 <div key={s.l} className="stc" style={{ borderColor: s.b }}>
                   <div style={{ fontSize: 26, fontWeight: 700, color: s.cl, marginBottom: 5, fontFamily: "'Space Grotesk', sans-serif" }}>{s.v}</div>
@@ -1517,34 +1259,16 @@ export default function VaultApp({ onBack }) {
                 const cc  = VAULT_CAT[doc.cat]?.color ?? '#7B6FE8';
                 const has = !!imgs[doc.id];
                 return (
-                  <TiltCard key={doc.id} aria-label={`Open ${doc.name}`} onClick={() => { setDocView(doc); setKebabOpen(false); }}>
-                    <div className="acard" style={{ borderTop: `2.5px solid ${cc}`, padding: 16, position: 'relative', overflow: 'hidden' }}>
-                      <div className="shine" style={{ position: 'absolute', inset: 0, borderRadius: 16, pointerEvents: 'none', transition: 'background .1s' }} />
-                      <div style={{ position: 'relative' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 10, background: `${cc}1A`, border: `1px solid ${cc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: cc, flexShrink: 0, overflow: 'hidden' }}>
-                              {has ? <img src={imgs[doc.id]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <DI size={17} />}
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--tx)', marginBottom: 2 }}>{doc.name}</div>
-                              <div style={{ fontSize: 11.5, color: 'var(--tx4)', maxWidth: 148, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.by}</div>
-                            </div>
-                          </div>
-                          <Badge exp={doc.expires} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--bd)' }}>
-                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tx3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.num}</span>
-                          <button className="abic" aria-label={`Copy ${doc.name} document number`} style={{ width: 26, height: 26, borderRadius: 6, marginLeft: 6, flexShrink: 0 }} onClick={(e) => copyNum(e, doc.id, doc.num)}>
-                            <span aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
-        {cpId === doc.id ? 'Copied' : ''}
-      </span>
-      {cpId === doc.id ? <Check size={12} style={{ color: 'var(--gr)' }} /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </TiltCard>
+                  <DocumentCard
+                    key={doc.id}
+                    doc={doc}
+                    img={has ? imgs[doc.id] : null}
+                    catColor={cc}
+                    icon={DI}
+                    onOpen={() => { setDocView(doc); setKebabOpen(false); }}
+                    onCopy={copyNum}
+                    copied={cpId === doc.id}
+                  />
                 );
               })}
             </div>
@@ -1565,393 +1289,107 @@ export default function VaultApp({ onBack }) {
         })}
       </div>
 
-      {/* ═══ DETAIL MODAL ═══ */}
+      {/* ═══ DOCUMENT DETAIL MODAL ═══ */}
       {docView && (() => {
         const DI  = docIcon(docView.name, docView.cat);
         const cc  = VAULT_CAT[docView.cat]?.color ?? '#7B6FE8';
         const has = !!imgs[docView.id];
         return (
-          <div className="mbg" onClick={() => setDocView(null)}>
-            <div ref={modalRef} className="mbox si" role="dialog" aria-modal="true" aria-label="Document details" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 13, background: `${cc}1A`, border: `1.5px solid ${cc}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: cc, overflow: 'hidden' }}>
-                    {has ? <img src={imgs[docView.id]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <DI size={22} />}
-                  </div>
-                  <div>
-                    <h3 style={{ margin: '0 0 3px', fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>{docView.name}</h3>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--tx3)' }}>{docView.by}</p>
-                  </div>
-                </div>
-                <button className="abic" aria-label="Close document details" onClick={() => { setDocView(null); setKebabOpen(false); }}><X size={18} /></button>
-              </div>
-
-              {has ? (
-                <img src={imgs[docView.id]} style={{ width: '100%', maxHeight: 180, objectFit: 'contain', borderRadius: 10, background: 'var(--bg2)', marginBottom: 16 }} alt="Document" />
-              ) : (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-                  <span className="no-img-tag"><AlertCircle size={11} />No image attached</span>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
-                {[
-                  { l: 'Category',   v: VAULT_CAT[docView.cat]?.label },
-                  { l: 'Issue Date', v: fmtDate(docView.issued) },
-                  { l: 'Expiry',     v: docView.expires ? fmtDate(docView.expires) : 'No expiry' },
-                  { l: 'Status',     v: <Badge exp={docView.expires} /> },
-                ].map((r) => (
-                  <div key={r.l}>
-                    <div className="lbl" style={{ marginBottom: 5 }}>{r.l}</div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--tx2)' }}>{r.v}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <div className="lbl" style={{ marginBottom: 7 }}>Document Number</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', borderRadius: 10, padding: '11px 14px', border: '1px solid var(--bd)' }}>
-                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, flex: 1, color: 'var(--tx2)' }}>{docView.num}</span>
-                  <button className="abtn abg" style={{ padding: '5px 11px', fontSize: 12, gap: 5 }} onClick={(e) => copyNum(e, docView.id, docView.num)}>
-                    {cpId === docView.id ? <><Check size={12} />Copied</> : <><Copy size={12} />Copy</>}
-                  </button>
-                </div>
-              </div>
-
-              {docView.notes && (
-                <div style={{ background: 'var(--sur2)', border: '1px solid var(--bd)', borderLeft: `3px solid ${cc}`, borderRadius: 10, padding: '11px 14px', marginBottom: 16 }}>
-                  <div className="lbl" style={{ marginBottom: 4 }}>Notes</div>
-                  <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6 }}>{docView.notes}</div>
-                </div>
-              )}
-
-              {/* Version history */}
-              {docView.versions && docView.versions.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <div className="lbl" style={{ marginBottom: 8 }}>Version History</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {docView.versions.map((v, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8, border: '1px solid var(--bd)' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 600 }}>{v.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--tx4)' }}>
-                            {new Date(v.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          className="abtn abg"
-                          style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
-                          onClick={() => {
-                            const restored = { ...docView, ...v, versions: docView.versions };
-                            const newDocs = docs.map((d) => d.id === docView.id ? restored : d);
-                            persist(newDocs, imgs).then((result) => {
-                              if (result.ok) {
-                                setDocs(newDocs);
-                                setDocView(restored);
-                                showToast('Version restored');
-                              }
-                            });
-                          }}
-                        >
-                          Restore
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: 10, paddingTop: 18, borderTop: '1px solid var(--bd)' }}>
-                <button type="button" className="abtn abg" style={{ flex: 1, justifyContent: 'center' }} onClick={() => openEdit(docView)}><Pencil size={13} />Edit</button>
-                <div className="kebab-menu">
-                  <button className="abic" aria-label="More document actions" style={{ border: '1px solid var(--bd)' }} onClick={() => setKebabOpen((o) => !o)} title="More actions">
-                    <MoreVertical size={16} />
-                  </button>
-                  {kebabOpen && (
-                    <>
-                      <div style={{ position: 'fixed', inset: 0, zIndex: 19 }} onClick={() => setKebabOpen(false)} />
-                      <div className="kebab-pop">
-                        {has && (
-                          <>
-                            <button type="button" className="kebab-item" onClick={() => { downloadJPEG(docView); setKebabOpen(false); }}>
-                              <Download size={14} />Download as JPEG
-                            </button>
-                            <button type="button" className="kebab-item" onClick={() => { downloadPDF(docView); setKebabOpen(false); }}>
-                              <Download size={14} />Download as PDF
-                            </button>
-                          </>
-                        )}
-                        <button type="button" className="kebab-item danger" onClick={() => { deleteDoc(docView.id); setKebabOpen(false); }}>
-                          <Trash2 size={14} />Delete document
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <DocumentModal
+            doc={docView}
+            img={has ? imgs[docView.id] : null}
+            catColor={cc}
+            onClose={() => { setDocView(null); setKebabOpen(false); }}
+            onEdit={openEdit}
+            onDelete={() => deleteDoc(docView.id)}
+            onCopy={copyNum}
+            copied={cpId === docView.id}
+            onDownloadJPEG={() => downloadJPEG(docView)}
+            onDownloadPDF={() => downloadPDF(docView)}
+            hasImage={has}
+          />
         );
       })()}
 
       {/* ═══ ADD MODAL ═══ */}
-      {addOpen && (
-        <div className="mbg" onClick={() => setAddOpen(false)}>
-          <div ref={modalRef} className="mbox si" role="dialog" aria-modal="true" aria-label={editingId ? 'Edit document' : 'Add document'} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>{editingId ? 'Edit Document' : 'Add Document'}</h3>
-              <button className="abic" aria-label="Close add document dialog" onClick={() => setAddOpen(false)}><X size={18} /></button>
-            </div>
-
-            <div className="tbar" role="tablist" aria-label="Document input method" style={{ marginBottom: 20 }}>
-              <button type="button" role="tab" aria-selected={addTab === 'scan'} className={`atab${addTab === 'scan' ? ' on' : ''}`} onClick={() => setAddTab('scan')}>
-                <Sparkles size={12} style={{ display: 'inline', marginRight: 5, verticalAlign: '-1px' }} />Scan with AI
-              </button>
-              <button type="button" role="tab" aria-selected={addTab === 'manual'} className={`atab${addTab === 'manual' ? ' on' : ''}`} onClick={() => setAddTab('manual')}>
-                <Pencil size={12} style={{ display: 'inline', marginRight: 5, verticalAlign: '-1px' }} />Manual Entry
-              </button>
-            </div>
-
-            {/* ── SCAN TAB ── */}
-            {addTab === 'scan' && (
-              <div>
-                {/* Groq badge */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--acs)', border: '1px solid rgba(123,111,232,.25)', borderRadius: 9, padding: '8px 12px', marginBottom: 16 }}>
-                  <Sparkles size={13} style={{ color: 'var(--ac1)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: 'var(--act)', flex: 1 }}>
-                    Powered by <strong>Groq</strong> · Free tier
-                  </span>
-                  <span style={{ fontSize: 10, color: 'var(--tx4)' }}>PNG/JPG/WEBP · max 2.5 MB</span>
-                </div>
-
-                {!file && !analyzing && (
-                  <div
-                    className={`uz${drag ? ' dg' : ''}`}
-                    onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-                    onDragLeave={() => setDrag(false)}
-                    onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
-                    onClick={() => fileRef.current?.click()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        fileRef.current?.click();
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Choose a document image"
-                  >
-                    <div style={{ width: 54, height: 54, borderRadius: 14, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', boxShadow: '0 4px 16px rgba(108,92,231,.3)' }}>
-                      <Upload size={24} color="#fff" />
-                    </div>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--tx2)', margin: '0 0 5px', fontFamily: "'Space Grotesk', sans-serif" }}>Drop your document here</p>
-                    <p style={{ fontSize: 12, color: 'var(--tx3)', margin: '0 0 4px' }}>PNG, JPG or WEBP · max 2.5 MB</p>
-                    <p style={{ fontSize: 11, color: 'var(--tx4)', margin: '0 0 18px' }}>For PDFs: take a screenshot first, then upload the image</p>
-                    <button type="button" className="abtn abp" style={{ fontSize: 13 }} onClick={(e) => e.stopPropagation()}>Browse Files</button>
-                    <input type="file" ref={fileRef} hidden accept=".png,.jpg,.jpeg,.webp" onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); }} />
-                  </div>
-                )}
-
-                {analyzing && (
-                  <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-                    <div style={{ width: 58, height: 58, borderRadius: '50%', background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
-                      <Loader2 size={28} color="#fff" className="spin" />
-                    </div>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--tx)', margin: '0 0 4px', fontFamily: "'Space Grotesk', sans-serif" }}>Groq AI reading document…</p>
-                    <p style={{ fontSize: 12, color: 'var(--tx3)', margin: 0 }}>{file?.name}</p>
-                    {filePrev && <img src={filePrev} style={{ width: '100%', maxHeight: 90, objectFit: 'contain', borderRadius: 8, marginTop: 12, opacity: 0.5 }} alt="" />}
-                  </div>
-                )}
-
-                {aErr && (
-                  <div style={{ textAlign: 'center', background: 'var(--res)', border: '1px solid var(--re)', borderRadius: 12, padding: '20px 16px', marginBottom: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(248,113,113,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', color: 'var(--re)' }}>
-                      <AlertCircle size={20} />
-                    </div>
-                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--ret)', fontWeight: 600 }}>{aErr}</p>
-                    <button className="abtn abg" style={{ fontSize: 12, padding: '5px 11px' }} onClick={() => { setAErr(null); setAddTab('manual'); }}>
-                      Fill in manually instead
-                    </button>
-                  </div>
-                )}
-
-                {analyzed && !analyzing && (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--grs)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 9, padding: '9px 13px', marginBottom: 14 }}>
-                      <Check size={15} style={{ color: 'var(--gr)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--grt)', fontWeight: 500, flex: 1 }}>Groq analyzed successfully — review below.</span>
-                      <button className="abic" aria-label="Remove scanned file" style={{ width: 26, height: 26 }} onClick={() => { setFile(null); setFilePrev(null); setAnalyzed(false); }}><X size={13} /></button>
-                    </div>
-                    {filePrev && (
-                      <img src={filePrev} style={{ width: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 10, marginBottom: 14, background: 'var(--bg2)', padding: 8 }} alt="" />
-                    )}
-                    <DocForm nd={nd} setNd={setNd} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {addTab === 'manual' && <DocForm nd={nd} setNd={setNd} />}
-
-            {(addTab === 'manual' || analyzed) && (
-              <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--bd)', justifyContent: 'flex-end' }}>
-                <button className="abtn abg" onClick={() => setAddOpen(false)}>Cancel</button>
-                <button className="abtn abp" onClick={saveDoc} disabled={savingDoc || !nd.name.trim() || !nd.num.trim()}>
-                  <Check size={14} />{editingId ? 'Save Changes' : 'Save & Encrypt'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <AddDocumentModal
+        addOpen={addOpen}
+        editingId={editingId}
+        addTab={addTab}
+        setAddTab={setAddTab}
+        file={file}
+        filePrev={filePrev}
+        drag={drag}
+        analyzing={analyzing}
+        analyzed={analyzed}
+        aErr={aErr}
+        nd={nd}
+        setNd={setNd}
+        savingDoc={savingDoc}
+        fileRef={fileRef}
+        onFile={handleFile}
+        onCancel={() => setAddOpen(false)}
+        onSave={saveDoc}
+        onRemoveFile={() => { setFile(null); setFilePrev(null); setAnalyzed(false); }}
+        onManualEntry={() => { setAErr(null); setAddTab('manual'); }}
+      />
 
       {/* ═══ EMERGENCY MODAL ═══ */}
-      {emOpen && (
-        <div className="mbg" onClick={() => setEmOpen(false)}>
-          <div ref={modalRef} className="mbox si" role="dialog" aria-modal="true" aria-label="Emergency card" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--res)', border: '1.5px solid var(--re)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--re)' }}>
-                  <Zap size={20} />
-                </div>
-                <div>
-                  <h3 style={{ margin: '0 0 3px', fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Emergency Card</h3>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--tx3)' }}>Present to medical staff · QR for quick access</p>
-                </div>
-              </div>
-              <button className="abic" aria-label="Close emergency card" onClick={() => setEmOpen(false)}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'start', marginBottom: 16 }}>
-              <div style={{ background: 'var(--res)', border: '1px solid rgba(248,113,113,.2)', borderRadius: 14, padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                {[
-                  { l: 'Blood Type',        v: <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--re)', fontFamily: "'Space Grotesk', sans-serif" }}>{emergency.bloodType || '—'}</span> },
-                  { l: 'Organ Donor',       v: emergency.donor ? 'Yes ✓' : 'No' },
-                  { l: 'Allergies',         v: emergency.allergies.join(', ') || 'None listed' },
-                  { l: 'Medications',       v: emergency.medications.join(', ') || 'None listed' },
-                  { l: 'Conditions',        v: emergency.conditions.join(', ') || 'None listed' },
-                  { l: 'Emergency Contact', v: <div><div style={{ fontWeight: 600, fontSize: 13, color: 'var(--tx)' }}>{emergency.contact.name || 'Not provided'}</div><div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>{emergency.contact.phone}</div></div> },
-                ].map((r) => (
-                  <div key={r.l}>
-                    <div className="lbl" style={{ marginBottom: 4 }}>{r.l}</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--tx2)' }}>{r.v}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ textAlign: 'center', background: 'var(--bg2)', borderRadius: 12, padding: 10, border: '1px solid var(--bd)' }}>
-                {qrDataUrl ? (
-                  <img src={qrDataUrl} width={155} height={155} alt="Emergency QR generated locally" style={{ display: 'block', borderRadius: 6 }} />
-                ) : (
-                  <div style={{ width: 155, height: 155, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tx4)', fontSize: 11, textAlign: 'center', padding: 12 }}>
-                    {qrError ? 'QR unavailable — use Share instead' : 'Generating QR locally…'}
-                  </div>
-                )}
-                <p style={{ fontSize: 10, color: 'var(--tx4)', margin: '8px 0 0', fontWeight: 500 }}>Generated locally ·<br />no QR data leaves this device</p>
-              </div>
-            </div>
-
-            {emEditing ? (
-               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                 <div className="lbl">Edit emergency details</div>
-                 <label className="lbl">Blood type
-                   <input className="ainp" value={emDraft.bloodType} onChange={(e) => setEmDraft((value) => ({ ...value, bloodType: e.target.value }))} placeholder="e.g. O+" />
-                 </label>
-                 <label className="lbl">Allergies (comma-separated)
-                   <input className="ainp" value={emDraft.allergies.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, allergies: listFromText(e.target.value) }))} placeholder="None" />
-                 </label>
-                 <label className="lbl">Medications (comma-separated)
-                   <input className="ainp" value={emDraft.medications.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, medications: listFromText(e.target.value) }))} placeholder="None" />
-                 </label>
-                 <label className="lbl">Conditions (comma-separated)
-                   <input className="ainp" value={emDraft.conditions.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, conditions: listFromText(e.target.value) }))} placeholder="None" />
-                 </label>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                   <label className="lbl">Contact name
-                     <input className="ainp" value={emDraft.contact.name} onChange={(e) => setEmDraft((value) => ({ ...value, contact: { ...value.contact, name: e.target.value } }))} />
-                   </label>
-                   <label className="lbl">Contact phone
-                     <input className="ainp" value={emDraft.contact.phone} onChange={(e) => setEmDraft((value) => ({ ...value, contact: { ...value.contact, phone: e.target.value } }))} />
-                   </label>
-                 </div>
-                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--tx2)', fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>
-                   <input type="checkbox" checked={emDraft.donor} onChange={(e) => setEmDraft((value) => ({ ...value, donor: e.target.checked }))} />
-                   Organ donor
-                 </label>
-                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                   <button type="button" className="abtn abg" onClick={() => { setEmDraft(cloneEmergency(emergency)); setEmEditing(false); }}>Cancel</button>
-                   <button type="button" className="abtn abp" onClick={saveEmergency} disabled={emSaving}>
-                     {emSaving ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
-                     Save details
-                   </button>
-                 </div>
-               </div>
-             ) : (
-               <button type="button" className="abtn abg" onClick={() => { setEmDraft(cloneEmergency(emergency)); setEmEditing(true); }} style={{ width: '100%', justifyContent: 'center', marginBottom: 14 }}>
-                 <Pencil size={14} />Edit emergency details
-               </button>
-             )}
-
-             <button type="button" className="abtn abd" onClick={shareEmergencyCard} style={{ width: '100%', justifyContent: 'center', padding: 11, fontSize: 14, fontWeight: 600 }}>
-              <Share2 size={15} />Share Emergency Card
-            </button>
-          </div>
-        </div>
-      )}
+      <EmergencyModal
+        emOpen={emOpen}
+        emergency={emergency}
+        qrDataUrl={qrDataUrl}
+        qrError={qrError}
+        emDraft={emDraft}
+        emEditing={emEditing}
+        emSaving={emSaving}
+        onClose={() => setEmOpen(false)}
+        onEdit={() => { setEmDraft(cloneEmergency(emergency)); setEmEditing(true); }}
+        onSave={saveEmergency}
+        onShare={shareEmergencyCard}
+        onCancelEdit={() => { setEmDraft(cloneEmergency(emergency)); setEmEditing(false); }}
+      />
 
       {/* ═══ CHANGE PIN MODAL ═══ */}
-      {pinModal && (
-        <div className="mbg" onClick={() => setPinModal(false)}>
-          <div ref={modalRef} className="mbox si" role="dialog" aria-modal="true" aria-label="Change PIN" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Change PIN</h3>
-              <button className="abic" aria-label="Close change PIN dialog" onClick={() => setPinModal(false)}><X size={18} /></button>
-            </div>
+      <ChangePinModal
+        pinModal={pinModal}
+        pinOld={pinOld}
+        pinNew={pinNew}
+        pinNew2={pinNew2}
+        pinChErr={pinChErr}
+        pinChBusy={pinChBusy}
+        onClose={() => setPinModal(false)}
+        onSave={handlePinChange}
+      />
 
-            {pinChErr && (
-              <div style={{ background: 'var(--res)', border: '1px solid var(--re)', borderRadius: 10, padding: '10px 13px', marginBottom: 14, fontSize: 13, color: 'var(--ret)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertCircle size={14} />{pinChErr}
-              </div>
-            )}
+      {/* ═══ UPGRADE PROMPT ═══ */}
+      <UpgradePrompt
+        showUpgradePrompt={showUpgradePrompt && phase === 'open'}
+        onClose={() => setShowUpgradePrompt(false)}
+        onUpgrade={handleUpgrade}
+      />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label>
-                <div className="lbl" style={{ marginBottom: 5 }}>Current PIN</div>
-                <input
-                  type="password" inputMode="numeric" maxLength={6}
-                  value={pinOld} onChange={(e) => setPinOld(e.target.value.replace(/\D/g, ''))}
-                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
-                />
-              </label>
-              <label>
-                <div className="lbl" style={{ marginBottom: 5 }}>New PIN (6 digits)</div>
-                <input
-                  type="password" inputMode="numeric" maxLength={6}
-                  value={pinNew} onChange={(e) => setPinNew(e.target.value.replace(/\D/g, ''))}
-                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
-                />
-              </label>
-              <label>
-                <div className="lbl" style={{ marginBottom: 5 }}>Confirm New PIN</div>
-                <input
-                  type="password" inputMode="numeric" maxLength={6}
-                  value={pinNew2} onChange={(e) => setPinNew2(e.target.value.replace(/\D/g, ''))}
-                  className="ainp" style={{ width: '100%', letterSpacing: 4, fontFamily: "'JetBrains Mono', monospace" }}
-                />
-              </label>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--bd)', justifyContent: 'flex-end' }}>
-              <button className="abtn abg" onClick={() => setPinModal(false)}>Cancel</button>
-              <button className="abtn abp" onClick={handlePinChange} disabled={pinChBusy}>
-                {pinChBusy ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
-                {pinChBusy ? 'Re-encrypting…' : 'Save New PIN'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ═══ PASSPHRASE SETUP ═══ */}
+      {showPassphraseSetup && (
+        <PassphraseSetup
+          onCreate={handlePassphraseCreate}
+          onCancel={() => setShowPassphraseSetup(false)}
+        />
       )}
+
+      {/* ═══ SCAN CONSENT ═══ */}
+      <ScanConsent
+        showScanConsent={showScanConsent}
+        onClose={() => setShowScanConsent(false)}
+        onGroq={() => { setShowScanConsent(false); if (pendingScanFile) runScan(pendingScanFile); }}
+        onDevice={() => { setShowScanConsent(false); if (pendingScanFile) runOnDeviceScan(pendingScanFile); }}
+      />
+
+      {/* ═══ AUDIT LOG ═══ */}
+      <AuditLogModal
+        showAuditLog={showAuditLog}
+        onClose={() => setShowAuditLog(false)}
+      />
 
       {/* ═══ IDLE AUTO-LOCK WARNING ═══ */}
       {idleWarn && phase === 'open' && (
@@ -1968,126 +1406,6 @@ export default function VaultApp({ onBack }) {
           {toast.type === 'err' ? <AlertCircle size={14} /> : <Check size={14} />}
           {toast.txt}
         </div>
-      )}
-
-      {/* ═══ AUDIT LOG ═══ */}
-      {showAuditLog && (
-        <div className="mbg" onClick={() => setShowAuditLog(false)}>
-          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Audit log" tabIndex={-1} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Audit Log</h3>
-              <button className="abic" aria-label="Close audit log" onClick={() => setShowAuditLog(false)}><span aria-hidden="true">×</span></button>
-            </div>
-            <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {getAuditLog().length === 0 ? (
-                <p style={{ color: 'var(--tx3)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>No activity yet.</p>
-              ) : (
-                [...getAuditLog()].reverse().map((entry, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8 }}>
-                    <span style={{ fontSize: 11, color: 'var(--tx4)', fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
-                      {new Date(entry.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 600, textTransform: 'capitalize' }}>
-                      {entry.event}
-                    </span>
-                    {entry.details && (
-                      <span style={{ fontSize: 12, color: 'var(--tx3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {entry.details}
-                      </span>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SCAN CONSENT ═══ */}
-      {showScanConsent && (
-        <div className="mbg" onClick={() => setShowScanConsent(false)}>
-          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Scan consent" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Scan Document</h3>
-              <button className="abic" aria-label="Close" onClick={() => setShowScanConsent(false)}><span aria-hidden="true">×</span></button>
-            </div>
-            <p style={{ fontSize: 14, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 16 }}>
-              Your document image can be scanned in two ways:
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
-                <Sparkles size={16} style={{ color: 'var(--ac1)', flexShrink: 0, marginTop: 2 }} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan with Groq AI</div>
-                  <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
-                    Faster and more accurate. Your image is sent to Groq's servers for processing.
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
-                <Shield size={16} style={{ color: 'var(--gr)', flexShrink: 0, marginTop: 2 }} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan on-device</div>
-                  <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
-                    Your image never leaves this device. Slower and less accurate, but fully private.
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" className="abtn abg" onClick={() => setShowScanConsent(false)}>Cancel</button>
-              <button
-                type="button"
-                className="abtn abg"
-                onClick={() => { setShowScanConsent(false); if (pendingScanFile) runOnDeviceScan(pendingScanFile); }}
-              >
-                <Shield size={14} />On-device
-              </button>
-              <button
-                type="button"
-                className="abtn abp"
-                onClick={() => { setShowScanConsent(false); if (pendingScanFile) runScan(pendingScanFile); }}
-              >
-                <Sparkles size={14} />Scan with Groq
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ UPGRADE PROMPT ═══ */}
-      {showUpgradePrompt && phase === 'open' && (
-        <div className="mbg" onClick={() => setShowUpgradePrompt(false)}>
-          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Upgrade security" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--ams)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--am)' }}>
-                  <AlertTriangle size={18} />
-                </div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Upgrade Security</h3>
-              </div>
-              <button className="abic" aria-label="Close" onClick={() => setShowUpgradePrompt(false)}><span aria-hidden="true">×</span></button>
-            </div>
-            <p style={{ fontSize: 14, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 16 }}>
-              Your vault is secured with a <strong>6-digit PIN</strong> — only 1 million possible combinations. A long, unique passphrase is exponentially harder to crack.
-            </p>
-            <p style={{ fontSize: 13, color: 'var(--tx3)', lineHeight: 1.5, marginBottom: 20 }}>
-              Your documents and images will be re-encrypted with the new format. The old PIN vault is backed up until your next unlock.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" className="abtn abg" onClick={() => setShowUpgradePrompt(false)}>Not now</button>
-              <button type="button" className="abtn abp" onClick={handleUpgrade}>Upgrade</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ PASSPHRASE SETUP ═══ */}
-      {showPassphraseSetup && (
-        <PassphraseSetup
-          onCreate={handlePassphraseCreate}
-          onCancel={() => setShowPassphraseSetup(false)}
-        />
       )}
     </div>
   );
