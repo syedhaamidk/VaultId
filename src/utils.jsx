@@ -5,6 +5,7 @@ import {
   Fingerprint, Globe, Car, Key, Droplet, Syringe, FileText,
 } from 'lucide-react';
 import { VAULT_CAT } from './data.js';
+import { validateIndianDocument } from './utils/documentValidation.js';
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 // Date-only values are parsed as local calendar dates. Parsing them with
@@ -146,17 +147,32 @@ export function DocForm({ nd, setNd }) {
         { l: 'Document Name *',   p: 'e.g. Aadhar Card, Passport', k: 'name' },
         { l: 'Document Number *', p: 'e.g. XXXX XXXX 4521',        k: 'num'  },
         { l: 'Issued By',         p: 'Issuing authority',           k: 'by'   },
-      ].map(({ l, p, k }) => (
-        <div key={k}>
-          <label style={lbl}>{l}</label>
-          <input
-            className="ainp"
-            placeholder={p}
-            value={nd[k]}
-            onChange={(e) => setNd((n) => ({ ...n, [k]: e.target.value }))}
-          />
-        </div>
-      ))}
+      ].map(({ l, p, k }) => {
+        const validation = k === 'num' && nd[k] ? validateIndianDocument(nd[k]) : null;
+        return (
+          <div key={k}>
+            <label style={lbl}>{l}</label>
+            <input
+              className="ainp"
+              placeholder={p}
+              value={nd[k]}
+              onChange={(e) => setNd((n) => ({ ...n, [k]: e.target.value }))}
+              aria-invalid={validation ? !validation.valid : undefined}
+              aria-describedby={validation && !validation.valid ? 'doc-num-error' : undefined}
+            />
+            {validation && !validation.valid && validation.error && (
+              <p id="doc-num-error" role="alert" style={{ fontSize: 11, color: 'var(--am)', marginTop: 4 }}>
+                {validation.error}
+              </p>
+            )}
+            {validation && validation.valid && validation.type && (
+              <p style={{ fontSize: 11, color: 'var(--gr)', marginTop: 4 }}>
+                ✓ Valid {validation.type.toUpperCase()}
+              </p>
+            )}
+          </div>
+        );
+      })}
 
       <div>
         <label style={lbl}>Category</label>
