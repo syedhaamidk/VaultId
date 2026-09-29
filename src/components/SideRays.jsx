@@ -189,15 +189,20 @@ const SideRays = ({
     };
     window.addEventListener('resize', onResize);
 
-    // animation loop
-    const t0 = performance.now();
-    let rafId;
-    const loop = () => {
-      rafId = requestAnimationFrame(loop);
-      uniforms.iTime.value = (performance.now() - t0) / 1000;
+    // animation loop — skip for reduced-motion users (render one frame only)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
       renderer.render(scene, camera);
-    };
-    loop();
+    } else {
+      const t0 = performance.now();
+      let rafId;
+      const loop = () => {
+        rafId = requestAnimationFrame(loop);
+        uniforms.iTime.value = (performance.now() - t0) / 1000;
+        renderer.render(scene, camera);
+      };
+      loop();
+    }
 
     return () => {
       cancelAnimationFrame(rafId);

@@ -81,6 +81,17 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 .pu   { animation: pu   2.5s ease-in-out infinite; }
 .fl   { animation: fl   3.5s ease-in-out infinite; }
 
+/* ── Reduced motion ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spin, .pu, .fl { animation: none !important; }
+}
+
 /* ── Gradient helpers ─────────────────────────────────────────────────────────── */
 .gtext {
   background: linear-gradient(135deg, var(--ac1), var(--ac2));
