@@ -255,6 +255,60 @@ export function hasV1Backup() {
   return LS.get('vid_vault_backup') !== null;
 }
 
+// ── Secure sharing ────────────────────────────────────────────────────────────
+// Creates an encrypted, expiring share link for a document. The document
+// is encrypted with a random key; the key travels in the URL fragment
+// (never sent to a server). The link expires after a set time.
+
+export async function createShareLink(doc, imgs, expiresInHours = 24) {
+  try {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const keyRaw = await crypto.subtle.exportKey('raw', key);
+    const keyB64 = buf2b64(keyRaw);
+
+    const payload = JSON.stringify({ doc, img: imgs[doc.id] || null });
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      new TextEncoder().encode(payload),
+    );
+
+    const expiry = Date.now() + expiresInHours * 60 * 60 * 1000;
+    const shareData = {
+      iv: buf2b64(iv),
+      ct: buf2b64(ct),
+      exp: expiry,
+    };
+    const encoded = buf2b64(new TextEncoder().encode(JSON.stringify(shareData)));
+    return { ok: true, url: `${window.location.origin}${window.location.pathname}#share=${encoded}:${keyB64}` };
+  } catch (e) {
+    return { ok: false, reason: e?.message || 'SHARE_FAILED' };
+  }
+}
+
+export async function decryptShareLink(encoded, keyB64) {
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw', b642buf(keyB64),
+      { name: 'AES-GCM', length: 256 }, false, ['decrypt'],
+    );
+    const shareData = JSON.parse(new TextDecoder().decode(b642buf(encoded)));
+    if (Date.now() > shareData.exp) {
+      return { ok: false, reason: 'LINK_EXPIRED' };
+    }
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: b642buf(shareData.iv) },
+      key,
+      b642buf(shareData.ct),
+    );
+    const payload = JSON.parse(new TextDecoder().decode(pt));
+    return { ok: true, doc: payload.doc, img: payload.img, expiresAt: shareData.exp };
+  } catch (e) {
+    return { ok: false, reason: e?.message || 'DECRYPT_FAILED' };
+  }
+}
+
 // ── WebAuthn biometric unlock ─────────────────────────────────────────────────
 // Uses the WebAuthn PRF extension to derive a key from the assertion,
 // which wraps the DEK. The DEK is stored in a 'webauthn' slot.
