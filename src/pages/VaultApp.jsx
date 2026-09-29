@@ -11,6 +11,7 @@ import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../
 import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote } from '../crypto.js';
 import { syncVault } from '../sync.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
+import { scanOnDevice } from '../utils/onDeviceScan.js';
 import {
   supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
   onAuthChange, pushVault, pullVault,
@@ -90,6 +91,8 @@ export default function VaultApp({ onBack }) {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
   const [passphraseInput, setPassphraseInput] = useState('');
+  const [showScanConsent, setShowScanConsent] = useState(false);
+  const [pendingScanFile, setPendingScanFile] = useState(null);
 
   // ── cloud sync / auth ──
   const [user,       setUser]       = useState(null);
@@ -722,7 +725,9 @@ export default function VaultApp({ onBack }) {
     reader.onload = (e) => setFilePrev(e.target.result);
     reader.readAsDataURL(f);
 
-    runScan(f);
+    // Show consent dialog before scanning.
+    setPendingScanFile(f);
+    setShowScanConsent(true);
   }
 
   async function runScan(f) {
@@ -744,6 +749,29 @@ export default function VaultApp({ onBack }) {
         ? 'Add GROQ_API_KEY to your server environment (Vercel project settings → Environment Variables) — free at console.groq.com'
         : `Scan failed: ${err.message}. Try manual entry below.`;
       setAErr(msg);
+      setAddTab('manual');
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function runOnDeviceScan(f) {
+    setAnalyzing(true); setAnalyzed(false);
+    try {
+      const p = await scanOnDevice(f);
+      if (!p.ok) throw new Error(p.error || 'On-device scan failed');
+      setNd({
+        name:    p.name     ?? '',
+        cat:     'identity',
+        num:     p.num      ?? '',
+        by:      p.by       ?? '',
+        issued:  p.issued   ?? '',
+        expires: p.expires  ?? '',
+        notes:   p.notes    ?? '',
+      });
+      setAnalyzed(true);
+    } catch (err) {
+      setAErr(`On-device scan failed: ${err.message}. Try manual entry below.`);
       setAddTab('manual');
     } finally {
       setAnalyzing(false);
@@ -1863,6 +1891,58 @@ export default function VaultApp({ onBack }) {
         <div className="fa" style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', alignItems: 'center', gap: 8, background: toast.type === 'err' ? 'var(--re)' : 'var(--tx)', color: 'var(--bg)', padding: '10px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 200, boxShadow: 'var(--s4)' }}>
           {toast.type === 'err' ? <AlertCircle size={14} /> : <Check size={14} />}
           {toast.txt}
+        </div>
+      )}
+
+      {/* ═══ SCAN CONSENT ═══ */}
+      {showScanConsent && (
+        <div className="mbg" onClick={() => setShowScanConsent(false)}>
+          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Scan consent" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Scan Document</h3>
+              <button className="abic" aria-label="Close" onClick={() => setShowScanConsent(false)}><span aria-hidden="true">×</span></button>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 16 }}>
+              Your document image can be scanned in two ways:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+                <Sparkles size={16} style={{ color: 'var(--ac1)', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan with Groq AI</div>
+                  <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
+                    Faster and more accurate. Your image is sent to Groq's servers for processing.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+                <Shield size={16} style={{ color: 'var(--gr)', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan on-device</div>
+                  <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
+                    Your image never leaves this device. Slower and less accurate, but fully private.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="abtn abg" onClick={() => setShowScanConsent(false)}>Cancel</button>
+              <button
+                type="button"
+                className="abtn abg"
+                onClick={() => { setShowScanConsent(false); if (pendingScanFile) runOnDeviceScan(pendingScanFile); }}
+              >
+                <Shield size={14} />On-device
+              </button>
+              <button
+                type="button"
+                className="abtn abp"
+                onClick={() => { setShowScanConsent(false); if (pendingScanFile) runScan(pendingScanFile); }}
+              >
+                <Sparkles size={14} />Scan with Groq
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
