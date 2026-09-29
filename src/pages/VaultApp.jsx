@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
-import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS } from '../crypto.js';
+import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2 } from '../crypto.js';
+import PassphraseSetup from '../components/PassphraseSetup.jsx';
 import {
   supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
   onAuthChange, pushVault, pullVault,
@@ -84,6 +85,10 @@ export default function VaultApp({ onBack }) {
   const [failCount, setFailCount] = useState(0);
   const [lockedOut, setLockedOut] = useState(false);
   const [lockRemain,setLockRemain]= useState(0);
+  const [vaultVersion, setVaultVersion] = useState('none'); // none | v1 | v2
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
+  const [passphraseInput, setPassphraseInput] = useState('');
 
   // ── cloud sync / auth ──
   const [user,       setUser]       = useState(null);
@@ -144,11 +149,17 @@ export default function VaultApp({ onBack }) {
   const userIdRef = useRef(null);
   const mutationBusyRef = useRef(false);
   const persistQueueRef = useRef(Promise.resolve());
+  const pinRef = useRef(null);
 
   // Boot delay
   useEffect(() => {
     const timer = setTimeout(() => setPhase('locked'), 300);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Detect the vault version on mount (no secret needed).
+  useEffect(() => {
+    setVaultVersion(getVaultVersion());
   }, []);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
@@ -499,6 +510,9 @@ export default function VaultApp({ onBack }) {
         setEmergency(cloneEmergency(res.emergency || initialEmergency()));
         setEmDraft(cloneEmergency(res.emergency || initialEmergency()));
         setUnlockOk(true);
+        pinRef.current = np;
+        // Offer the v1 → v2 upgrade after a successful v1 unlock.
+        if (vaultVersion === 'v1') setShowUpgradePrompt(true);
         setTimeout(() => { setPhase('open'); setPin(''); setUnlockOk(false); }, 550);
       } else {
         if (res.reason === 'STORAGE_WRITE_FAILED') {
@@ -513,10 +527,6 @@ export default function VaultApp({ onBack }) {
         setPinErr(true);
 
         if (nextFail >= 5) {
-          // Lock out for 30s after 5 wrong attempts — slows down anyone
-          // guessing through the UI. Doesn't stop someone attacking the
-          // raw localStorage data directly, but raises the bar for the
-          // common case (someone picking up an unlocked/left-open device).
           const seconds = 30;
           setLockedOut(true);
           setLockRemain(seconds);
@@ -531,6 +541,34 @@ export default function VaultApp({ onBack }) {
         setTimeout(() => { setPin(''); setPinErr(false); setPhase('locked'); }, 700);
       }
     }, 80);
+  }
+
+  // ── v2 passphrase submit ─────────────────────────────────────────────────
+  async function handlePassphraseSubmit() {
+    if (phase === 'unlocking' || !passphraseInput) return;
+    setPhase('unlocking');
+    setUnlockErr(null);
+    const pp = passphraseInput;
+    setPassphraseInput('');
+
+    const res = await resolveUnlock(pp);
+    if (res.ok) {
+      setFailCount(0);
+      setCryptoKey(res.key);
+      setKdfIterations(res.kdfIterations || KDF_ITERATIONS);
+      setDocs(res.docs);
+      setImgs(res.imgs);
+      setUnlockErr(null);
+      setEmergency(cloneEmergency(res.emergency || initialEmergency()));
+      setEmDraft(cloneEmergency(res.emergency || initialEmergency()));
+      setUnlockOk(true);
+      // Clear the v1 backup on a successful v2 unlock in a fresh session.
+      if (hasV1Backup()) clearV1Backup();
+      setTimeout(() => { setPhase('open'); setUnlockOk(false); }, 550);
+    } else {
+      setUnlockErr('Incorrect passphrase — try again');
+      setPhase('locked');
+    }
   }
 
   // ── Vault persistence ─────────────────────────────────────────────────────
@@ -696,6 +734,44 @@ export default function VaultApp({ onBack }) {
       !cloudConfigured ? 'PIN changed locally' : cloud.ok ? 'PIN changed and synced' : 'PIN changed locally; cloud sync failed',
       !cloudConfigured || cloud.ok ? 'ok' : 'err',
     );
+  }
+
+  // ── v1 → v2 upgrade ───────────────────────────────────────────────────────
+  function handleUpgrade() {
+    setShowUpgradePrompt(false);
+    setShowPassphraseSetup(true);
+  }
+
+  async function handlePassphraseCreate(passphrase) {
+    setShowPassphraseSetup(false);
+
+    if (vaultVersion === 'none') {
+      // New vault.
+      const r = await createVaultV2(passphrase, [], {}, {});
+      if (r.ok) {
+        setCryptoKey(r.key);
+        setDocs(r.docs);
+        setImgs(r.imgs);
+        setEmergency(r.emergency);
+        setVaultVersion('v2');
+        showToast('Vault created with AES-256-GCM');
+      } else {
+        showToast('Could not create vault', 'err');
+      }
+    } else if (vaultVersion === 'v1') {
+      // Upgrade from v1 — uses the saved PIN to re-unlock and verify.
+      const r = await upgradeV1ToV2(pinRef.current, passphrase);
+      if (r.ok) {
+        setCryptoKey(r.key);
+        setDocs(r.docs);
+        setImgs(r.imgs);
+        setEmergency(r.emergency);
+        setVaultVersion('v2');
+        showToast('Vault upgraded to passphrase security');
+      } else {
+        showToast('Upgrade failed — v1 vault unchanged', 'err');
+      }
+    }
   }
 
   function openPinModal() {
@@ -968,10 +1044,35 @@ export default function VaultApp({ onBack }) {
 
         <h1 className="gtext" style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-.5px', margin: '0 0 5px', fontFamily: "'Space Grotesk', sans-serif" }}>VaultID</h1>
         <p style={{ fontSize: 13, color: 'var(--tx3)', margin: '0 0 28px' }}>
-          {phase === 'boot' ? 'Loading…' : phase === 'unlocking' ? 'Deriving key with PBKDF2…' : 'Enter PIN to unlock'}
+          {phase === 'boot' ? 'Loading…' : phase === 'unlocking' ? 'Deriving key…' : vaultVersion === 'v2' ? 'Enter passphrase to unlock' : 'Enter PIN to unlock'}
         </p>
 
-        {phase !== 'boot' && (
+        {/* v2: passphrase field */}
+        {phase !== 'boot' && vaultVersion === 'v2' && (
+          <>
+            <div style={{ marginBottom: 28 }}>
+              <input
+                type="password"
+                className="ainp"
+                placeholder="Enter passphrase"
+                value={passphraseInput}
+                onChange={(e) => setPassphraseInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handlePassphraseSubmit(); }}
+                autoComplete="current-password"
+                aria-label="Passphrase"
+                style={{ width: '100%', textAlign: 'center', letterSpacing: 2, fontFamily: "'JetBrains Mono', monospace" }}
+              />
+            </div>
+            {unlockErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>{unlockErr}</p>}
+            {unlockOk && <p style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+              <span className="sbadge"><Shield size={10} />AES-256-GCM · Passphrase</span>
+            </div>
+          </>
+        )}
+
+        {/* v1: PIN keypad (existing) */}
+        {phase !== 'boot' && vaultVersion === 'v1' && (
           <>
             <div className={pinErr ? 'shk' : ''} style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}>
               {Array.from({ length: PIN_LEN }).map((_, i) => (
@@ -1002,6 +1103,15 @@ export default function VaultApp({ onBack }) {
               <span className="sbadge"><Shield size={10} />AES-256-GCM · Groq AI</span>
             </div>
           </>
+        )}
+
+        {/* new vault: prompt to create a passphrase */}
+        {phase !== 'boot' && vaultVersion === 'none' && (
+          <div style={{ marginTop: 8 }}>
+            <button className="abtn abp" onClick={() => setShowPassphraseSetup(true)}>
+              Create Passphrase
+            </button>
+          </div>
         )}
       </div>
 
@@ -1633,6 +1743,36 @@ export default function VaultApp({ onBack }) {
           {toast.type === 'err' ? <AlertCircle size={14} /> : <Check size={14} />}
           {toast.txt}
         </div>
+      )}
+
+      {/* ═══ UPGRADE PROMPT ═══ */}
+      {showUpgradePrompt && phase === 'open' && (
+        <div className="mbg" onClick={() => setShowUpgradePrompt(false)}>
+          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Upgrade security" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Upgrade Security</h3>
+              <button className="abic" aria-label="Close" onClick={() => setShowUpgradePrompt(false)}><span aria-hidden="true">×</span></button>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 16 }}>
+              Your vault is secured with a 6-digit PIN. Upgrade to a passphrase for stronger security — a long, unique passphrase is far harder to brute-force than a PIN.
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--tx3)', lineHeight: 1.5, marginBottom: 20 }}>
+              Your documents and images will be re-encrypted with the new format. The old PIN vault is backed up until your next unlock.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="abtn abg" onClick={() => setShowUpgradePrompt(false)}>Not now</button>
+              <button type="button" className="abtn abp" onClick={handleUpgrade}>Upgrade</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ PASSPHRASE SETUP ═══ */}
+      {showPassphraseSetup && (
+        <PassphraseSetup
+          onCreate={handlePassphraseCreate}
+          onCancel={() => setShowPassphraseSetup(false)}
+        />
       )}
     </div>
   );

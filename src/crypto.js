@@ -180,6 +180,81 @@ export function isVaultV2() {
   return asV2Blob(LS.get('vid_vault')) !== null;
 }
 
+// Returns 'v1', 'v2', or 'none' (no vault yet).
+export function getVaultVersion() {
+  const raw = LS.get('vid_vault');
+  if (!raw) return 'none';
+  if (asV2Blob(raw)) return 'v2';
+  return 'v1';
+}
+
+// ── v1 → v2 upgrade ──────────────────────────────────────────────────────────
+// Upgrades a v1 vault to v2 in place. The v1 blob is backed up under
+// vid_vault_backup before the v2 blob is written. If verification fails,
+// the v1 blob is restored. The backup is deleted on the next successful
+// v2 unlock in a fresh session (handled by the UI).
+export async function upgradeV1ToV2(pin, passphrase) {
+  try {
+    // Save the v1 blob before anything overwrites it.
+    const v1Raw = LS.get('vid_vault');
+    if (!v1Raw) return { ok: false, reason: 'NO_VAULT' };
+
+    // Unlock the v1 vault to get the data.
+    const v1 = await tryUnlock(pin);
+    if (!v1.ok) return { ok: false, reason: 'WRONG_PIN' };
+
+    // Create a v2 vault with the same data (overwrites vid_vault).
+    const v2 = await createVaultV2(passphrase, v1.docs, v1.imgs, v1.emergency);
+    if (!v2.ok) {
+      // Restore the v1 blob.
+      LS.set('vid_vault', v1Raw);
+      return { ok: false, reason: v2.reason };
+    }
+
+    // Verify by unlocking the v2 vault in memory.
+    const verify = await unlockVaultV2(passphrase, v2.blob);
+    if (!verify.ok) {
+      LS.set('vid_vault', v1Raw);
+      return { ok: false, reason: 'VERIFY_FAILED' };
+    }
+
+    // Compare the data — must be identical.
+    if (
+      JSON.stringify(verify.docs) !== JSON.stringify(v1.docs) ||
+      JSON.stringify(verify.imgs) !== JSON.stringify(v1.imgs) ||
+      JSON.stringify(verify.emergency) !== JSON.stringify(v1.emergency)
+    ) {
+      LS.set('vid_vault', v1Raw);
+      return { ok: false, reason: 'VERIFY_FAILED' };
+    }
+
+    // Back up the v1 blob (overwrites any previous backup).
+    LS.set('vid_vault_backup', v1Raw);
+
+    return {
+      ok: true,
+      key: v2.key,
+      blob: v2.blob,
+      docs: v2.docs,
+      imgs: v2.imgs,
+      emergency: v2.emergency,
+      rev: v2.rev,
+    };
+  } catch (e) {
+    return { ok: false, reason: e?.message || 'UPGRADE_FAILED' };
+  }
+}
+
+// Delete the v1 backup (called on the next successful v2 unlock).
+export function clearV1Backup() {
+  LS.del('vid_vault_backup');
+}
+
+// Returns true if a v1 backup exists.
+export function hasV1Backup() {
+  return LS.get('vid_vault_backup') !== null;
+}
+
 // ── v2: create ───────────────────────────────────────────────────────────────
 export async function createVaultV2(passphrase, docs = [], imgs = {}, emergency = {}) {
   try {

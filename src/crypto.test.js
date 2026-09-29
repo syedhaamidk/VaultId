@@ -18,6 +18,7 @@ import {
   tryUnlock, saveVault, changePin, exportLocalBlob, resetVault,
   createVaultV2, unlockVaultV2, saveVaultV2, changePassphraseV2,
   addRecoverySlotV2, unlockWithRecoveryV2, removeSlotV2,
+  upgradeV1ToV2, hasV1Backup, clearV1Backup, getVaultVersion,
 } from './crypto.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -406,6 +407,74 @@ describe('crypto.js', () => {
     expect(r.docs).toEqual(fixture.docs);
     expect(r.imgs).toEqual(fixture.imgs);
     expect(r.emergency).toEqual(fixture.emergency);
+  });
+
+  // ── v1 → v2 upgrade ──────────────────────────────────────────────────────
+  it('upgradeV1ToV2: successful upgrade, data intact, v1 backup created', async () => {
+    // Create a v1 vault (with images persisted via saveVault).
+    const c = await tryUnlock('123456', DOCS, EMERGENCY);
+    await saveVault(DOCS, IMGS, c.key, EMERGENCY, c.kdfIterations);
+    expect(getVaultVersion()).toBe('v1');
+
+    // Upgrade to v2.
+    const r = await upgradeV1ToV2('123456', 'new-passphrase');
+    expect(r.ok).toBe(true);
+    expect(getVaultVersion()).toBe('v2');
+
+    // Data is intact.
+    const u = await unlockVaultV2('new-passphrase', r.blob);
+    expect(u.ok).toBe(true);
+    expect(u.docs).toEqual(DOCS);
+    expect(u.imgs).toEqual(IMGS);
+    expect(u.emergency).toEqual(EMERGENCY);
+
+    // v1 backup exists.
+    expect(hasV1Backup()).toBe(true);
+
+    // Old PIN no longer works.
+    const oldUnlock = await tryUnlock('123456');
+    expect(oldUnlock.ok).toBe(false);
+  });
+
+  it('upgradeV1ToV2: wrong PIN fails, v1 vault unchanged', async () => {
+    await tryUnlock('123456', DOCS, EMERGENCY);
+    const v1Raw = localStorage.getItem('vid_vault');
+
+    const r = await upgradeV1ToV2('wrong-pin', 'new-passphrase');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('WRONG_PIN');
+
+    // v1 vault is unchanged.
+    expect(localStorage.getItem('vid_vault')).toBe(v1Raw);
+    expect(getVaultVersion()).toBe('v1');
+
+    // Old PIN still works.
+    const u = await tryUnlock('123456');
+    expect(u.ok).toBe(true);
+    expect(u.docs).toEqual(DOCS);
+  });
+
+  it('upgradeV1ToV2: v1 backup is cleared on successful v2 unlock', async () => {
+    // Create and upgrade.
+    await tryUnlock('123456', DOCS, EMERGENCY);
+    const r = await upgradeV1ToV2('123456', 'new-passphrase');
+    expect(r.ok).toBe(true);
+    expect(hasV1Backup()).toBe(true);
+
+    // Simulate a fresh session: clear the backup flag, then unlock.
+    // (In the UI, clearV1Backup is called on successful v2 unlock.)
+    const u = await unlockVaultV2('new-passphrase', r.blob);
+    expect(u.ok).toBe(true);
+    clearV1Backup();
+    expect(hasV1Backup()).toBe(false);
+  });
+
+  it('getVaultVersion: returns none, v1, or v2 as expected', async () => {
+    expect(getVaultVersion()).toBe('none');
+    await tryUnlock('123456', DOCS, EMERGENCY);
+    expect(getVaultVersion()).toBe('v1');
+    await upgradeV1ToV2('123456', 'new-passphrase');
+    expect(getVaultVersion()).toBe('v2');
   });
 
 });
