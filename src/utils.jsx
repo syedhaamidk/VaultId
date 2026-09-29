@@ -4,14 +4,49 @@ import {
   CreditCard, Activity, Wallet, Home, Scale,
   Fingerprint, Globe, Car, Key, Droplet, Syringe, FileText,
 } from 'lucide-react';
-import { TODAY, VAULT_CAT } from './data.js';
+import { VAULT_CAT } from './data.js';
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
-export const daysLeft = (exp) =>
-  exp ? Math.floor((new Date(exp) - TODAY) / 86_400_000) : null;
+// Date-only values are parsed as local calendar dates. Parsing them with
+// `new Date('YYYY-MM-DD')` treats them as UTC and can display the previous day
+// for users west of Greenwich.
+function parseCalendarDate(value) {
+  if (!value) return null;
 
-export const fmtDate = (s) =>
-  s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  if (typeof value === 'string') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (match) {
+      const [, year, month, day] = match.map(Number);
+      const date = new Date(year, month - 1, day);
+      if (
+        date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+      ) return date;
+      return null;
+    }
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function daysLeft(exp) {
+  const expiry = parseCalendarDate(exp);
+  if (!expiry) return null;
+
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const expiryDay = Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
+  return Math.round((expiryDay - today) / 86_400_000);
+}
+
+export function fmtDate(value) {
+  const date = parseCalendarDate(value);
+  return date
+    ? date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+}
 
 // ── Pick a lucide icon based on document name / category ─────────────────────
 export function docIcon(name = '', cat = 'identity') {
@@ -43,7 +78,7 @@ export function Badge({ exp }) {
 }
 
 // ── TiltCard — 3-D perspective tilt that follows the mouse ───────────────────
-export function TiltCard({ children, onClick, style }) {
+export function TiltCard({ children, onClick, style, 'aria-label': ariaLabel }) {
   const ref = useRef(null);
   const raf = useRef(null);
 
@@ -80,6 +115,16 @@ export function TiltCard({ children, onClick, style }) {
       onMouseDown={(e) => { if (ref.current) ref.current.style.transform += ' scale(.98)'; }}
       onMouseUp={onLeave}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.(e);
+        }
+      }}
+      role="button"
+      aria-label={ariaLabel}
+      tabIndex={0}
       style={{ transition: 'transform .12s ease, box-shadow .12s ease', cursor: 'pointer', ...style }}
     >
       {children}

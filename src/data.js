@@ -3,8 +3,9 @@
  * Pure data — no React imports.
  */
 
-export const TODAY    = new Date('2026-06-18');
-export const DEMO_PIN = '1234';
+// Keep demo-only values behind VITE_DEMO_MODE in the app. Dates are calculated
+// at runtime by utils.jsx so document status never becomes stale.
+export const DEMO_PIN = '123456';
 
 // ── Document categories ──────────────────────────────────────────────────────
 export const VAULT_CAT = {
@@ -32,7 +33,18 @@ export const DOCS0 = [
 ];
 
 // ── Emergency card ───────────────────────────────────────────────────────────
-export const EM = {
+// Production vaults start with an empty card. Demo values are only used when
+// VITE_DEMO_MODE is explicitly enabled.
+export const EMPTY_EMERGENCY = {
+  bloodType:   '',
+  allergies:   [],
+  medications: [],
+  conditions:  [],
+  contact:     { name: '', phone: '' },
+  donor:       false,
+};
+
+export const DEMO_EMERGENCY = {
   bloodType:   'O+',
   allergies:   ['Penicillin'],
   medications: ['None currently'],
@@ -46,25 +58,25 @@ export const NAV_ITEMS = [
   {
     label: 'Documents', bgColor: '#1A1A30', textColor: '#D0D0FF',
     links: [
-      { label: 'Identity Cards',  href: '#' },
-      { label: 'Medical Records', href: '#' },
-      { label: 'Financial Docs',  href: '#' },
+      { label: 'Identity Cards',  href: '#features' },
+      { label: 'Medical Records', href: '#features' },
+      { label: 'Financial Docs',  href: '#features' },
     ],
   },
   {
     label: 'Security', bgColor: '#1A0F28', textColor: '#E0D0FF',
     links: [
-      { label: 'AES-256 Encryption', href: '#' },
-      { label: 'Emergency Card',     href: '#' },
-      { label: 'Zero-Knowledge',     href: '#' },
+      { label: 'AES-256 Encryption', href: '#security' },
+      { label: 'Emergency Card',     href: '#features' },
+      { label: 'Zero-Knowledge',     href: '#security' },
     ],
   },
   {
     label: 'Features', bgColor: '#0F1A28', textColor: '#C8E8FF',
     links: [
-      { label: 'AI Document Scan',   href: '#' },
-      { label: 'Expiry Tracking',    href: '#' },
-      { label: 'QR Emergency Card',  href: '#' },
+      { label: 'AI Document Scan',   href: '#features' },
+      { label: 'Expiry Tracking',    href: '#features' },
+      { label: 'QR Emergency Card',  href: '#features' },
     ],
   },
 ];
@@ -74,12 +86,12 @@ export const NAV_ITEMS = [
 export const FEATS = [
   {
     iconName: 'Shield',   title: 'AES-256-GCM',
-    desc: 'Military-grade encryption with 100k PBKDF2 iterations. Your PIN is the only key — never transmitted.',
+    desc: 'Military-grade encryption with 600k PBKDF2 iterations. Your PIN is the only key — never transmitted.',
     col: '#7B6FE8', cols: ['#7B6FE8', '#9B8FF8', '#C5BFFF'], glow: '255 230 90',
   },
   {
     iconName: 'Sparkles', title: 'AI Document Scan',
-    desc: 'Drop a PDF or photo. Claude extracts the document type, number, issuer, and expiry automatically.',
+    desc: 'Upload a PNG, JPG, or WEBP photo. Groq extracts the document type, number, issuer, and expiry automatically.',
     col: '#C060F0', cols: ['#C060F0', '#D890FF', '#ECC8FF'], glow: '280 80 85',
   },
   {

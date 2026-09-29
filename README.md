@@ -7,10 +7,10 @@ Military-grade encrypted document vault built with React + Vite.
 | Layer | Tech |
 |---|---|
 | Framework | React 18 + Vite 5 |
-| Encryption | AES-256-GCM · PBKDF2 100k iterations · Web Crypto API |
+| Encryption | AES-256-GCM · PBKDF2 600k iterations · Web Crypto API |
 | Storage | localStorage (encrypted blob only), optional Supabase sync |
 | Auth | Google OAuth via Supabase Auth (optional) |
-| AI Scanning | Groq vision model, proxied server-side via `api/scan.js` |
+| AI Scanning | Groq vision model, proxied server-side via `api/scan.js` (2.5 MB image limit) |
 | 3D Effects | Three.js WebGL (SideRays shader) |
 | Nav animation | GSAP (CardNav) |
 | Icons | Lucide React |
@@ -39,6 +39,8 @@ Military-grade encrypted document vault built with React + Vite.
 Zero-knowledge: the server never receives plaintext documents or your PIN — only AES-256-GCM ciphertext (for sync) and the raw image for AI scanning (which the proxy forwards to Groq but never persists).
 
 ## Quick start
+
+Requires Node.js `20.19+` (or `22.12+`).
 
 ```bash
 git clone ...
@@ -79,9 +81,11 @@ supabase_schema.sql          # Table + RLS policies for encrypted vault sync
 
 - PIN is **never stored** anywhere. It drives PBKDF2 to derive the AES key, which lives only in React state.
 - Wrong PIN → wrong key → AES-GCM auth tag fails → graceful error.
-- Document images are stored as base64 inside the encrypted blob.
+- Document images are stored as base64 inside the encrypted blob; emergency-card details are encrypted with the same vault key.
+- The emergency QR is generated locally in the browser. Medical/contact data is never sent to a third-party QR service.
+- The scan endpoint accepts same-origin requests, validates image payloads, and applies a best-effort rate limit. Set `GROQ_API_KEY` only in the server environment.
 - The Groq API key is **server-side only** (`GROQ_API_KEY`, no `VITE_` prefix) — see `api/scan.js`. It is never bundled into client JS.
-- Google sign-in (via Supabase Auth) only ever establishes identity for Row-Level-Security purposes — it never participates in encryption. Supabase only ever stores `{iv, salt, ciphertext}`.
+- Google sign-in (via Supabase Auth) only establishes identity for Row-Level-Security; it never participates in encryption. On a clean device, the cloud vault is checked before local initialization so a local copy cannot overwrite it. Supabase only stores `{iv, salt, ciphertext}`.
 
 ## PWA
 

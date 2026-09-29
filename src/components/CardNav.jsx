@@ -101,6 +101,13 @@ const CardNav = ({
     }
   };
 
+  const closeMenu = () => {
+    if (!isExpanded) return;
+    setIsHamburgerOpen(false);
+    setIsExpanded(false);
+    tlRef.current?.reverse();
+  };
+
   const setCardRef = (i) => (el) => { if (el) cardsRef.current[i] = el; };
 
   return (
@@ -160,7 +167,9 @@ const CardNav = ({
                   <a
                     key={`${lnk.label}-${i}`}
                     className="nav-card-link"
-                    href={lnk.href || '#'}
+                    href={lnk.href || '#features'}
+                    tabIndex={isExpanded ? 0 : -1}
+                    onClick={closeMenu}
                     aria-label={lnk.ariaLabel}
                     style={{ color: item.textColor }}
                   >

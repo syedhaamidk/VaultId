@@ -1,20 +1,125 @@
 /**
  * VaultID — /api/scan
  *
- * Server-side proxy for the Groq vision call. The Groq API key lives ONLY
- * here (as the non-VITE_-prefixed env var GROQ_API_KEY), so it's never
- * bundled into client JS and never visible via devtools/network tab.
- *
- * The client sends the document image; this function forwards it to Groq
- * with the server-held key and returns the parsed extraction result.
- *
- * Deploy target: Vercel (Node serverless function). If you deploy elsewhere,
- * port this same logic to that platform's serverless/edge function format —
- * the important part is just "key lives server-side, client never sees it".
+ * Server-side proxy for Groq vision. The API key is read only here and is
+ * never bundled into the client. The endpoint is intended for same-origin
+ * browser requests; it also applies a best-effort per-instance rate limit so
+ * a deployed key cannot be used as an unrestricted public proxy.
  */
 
-const GROQ_URL          = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
+const MAX_IMAGE_BYTES = 2_500_000;
+const MAX_DATA_URL_LENGTH = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 128;
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 20;
+
+// Set APP_ORIGIN in production when the app is served from a different origin
+// (for example, a custom domain). Same-origin requests are allowed by host.
+const configuredOrigins = new Set(
+  (process.env.APP_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
+
+const rateBuckets = new Map();
+
+function requestHeaders(req) {
+  return req?.headers || {};
+}
+
+function isAllowedOrigin(req) {
+  const headers = requestHeaders(req);
+  const origin = headers.origin;
+  // Same-origin browser POSTs normally include Origin. A missing Origin is
+  // allowed for non-browser clients, but remains subject to the rate limit.
+  if (!origin) return true;
+  if (configuredOrigins.has(origin.replace(/\/$/, ''))) return true;
+
+  try {
+    const host = headers['x-forwarded-host'] || headers.host;
+    return Boolean(host) && new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+function applyCors(req, res) {
+  const origin = requestHeaders(req).origin;
+  res.setHeader('Vary', 'Origin');
+  if (origin && isAllowedOrigin(req)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+}
+
+function allowRequest(req) {
+  const headers = requestHeaders(req);
+  const forwarded = headers['x-forwarded-for'];
+  const key = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || 'unknown';
+  const now = Date.now();
+  const current = rateBuckets.get(key);
+
+  if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+    rateBuckets.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+
+  if (current.count >= RATE_LIMIT) return false;
+  current.count += 1;
+
+  // Opportunistically remove old buckets so a long-lived serverless instance
+  // does not retain every address forever.
+  if (rateBuckets.size > 500) {
+    for (const [bucketKey, bucket] of rateBuckets) {
+      if (now - bucket.startedAt >= RATE_WINDOW_MS) rateBuckets.delete(bucketKey);
+    }
+  }
+  return true;
+}
+
+function parseBody(body) {
+  if (!body) return {};
+  if (typeof body === 'string') return JSON.parse(body);
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(body)) return JSON.parse(body.toString());
+  return body;
+}
+
+function imageSizeFromDataUrl(dataUrl) {
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  if (!match) return null;
+
+  const payload = match[2];
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  return {
+    mimeType: match[1],
+    bytes: Math.floor((payload.length * 3) / 4) - padding,
+  };
+}
+
+function cleanText(value, maxLength = 500) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function cleanDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function sanitizeResult(result) {
+  const categories = new Set(['identity', 'medical', 'financial', 'property', 'legal']);
+  const category = typeof result?.category === 'string' ? result.category.toLowerCase() : '';
+  return {
+    name: cleanText(result?.name, 120),
+    category: categories.has(category) ? category : 'identity',
+    num: cleanText(result?.num, 160),
+    by: cleanText(result?.by, 160),
+    issued: cleanDate(result?.issued),
+    expires: cleanDate(result?.expires),
+    notes: cleanText(result?.notes, 500),
+  };
+}
 
 const PROMPT = `You are a document data extractor. Carefully read this document image and extract the key fields.
 Return ONLY a valid JSON object with no markdown fences, explanation, or extra text:
@@ -29,65 +134,80 @@ Return ONLY a valid JSON object with no markdown fences, explanation, or extra t
 }`;
 
 export default async function handler(req, res) {
-  // Basic CORS / method guard — same-origin calls from the app itself.
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyCors(req, res);
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (!isAllowedOrigin(req)) {
+    return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED', message: 'Origin is not allowed.' });
+  }
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.' });
+  if (!allowRequest(req)) {
+    return res.status(429).json({ error: 'RATE_LIMITED', message: 'Too many scan requests. Try again later.' });
+  }
 
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   if (!GROQ_API_KEY) {
-    return res.status(500).json({ error: 'NO_SERVER_KEY', message: 'GROQ_API_KEY is not set on the server. Add it in your Vercel project env vars (not VITE_-prefixed).' });
+    return res.status(500).json({ error: 'NO_SERVER_KEY', message: 'GROQ_API_KEY is not set on the server.' });
   }
 
-  const { dataUrl, mimeType } = req.body || {};
-  if (!dataUrl) return res.status(400).json({ error: 'BAD_REQUEST', message: 'Missing dataUrl' });
-
-  // Lightweight server-side guard against abuse: reject anything obviously
-  // not an image data URL or absurdly large (base64 inflates ~33%).
-  if (!dataUrl.startsWith('data:image/')) {
-    return res.status(400).json({ error: 'BAD_REQUEST', message: 'Expected an image data URL' });
+  let body;
+  try {
+    body = parseBody(req.body);
+  } catch {
+    return res.status(400).json({ error: 'BAD_REQUEST', message: 'Invalid JSON body.' });
   }
-  if (dataUrl.length > 6_000_000) {
-    return res.status(413).json({ error: 'TOO_LARGE', message: 'Image too large' });
+
+  const dataUrl = body?.dataUrl;
+  if (typeof dataUrl !== 'string' || !dataUrl) {
+    return res.status(400).json({ error: 'BAD_REQUEST', message: 'Missing dataUrl.' });
+  }
+  if (dataUrl.length > MAX_DATA_URL_LENGTH) {
+    return res.status(413).json({ error: 'TOO_LARGE', message: 'Image is too large.' });
+  }
+
+  const image = imageSizeFromDataUrl(dataUrl);
+  if (!image) {
+    return res.status(400).json({ error: 'BAD_REQUEST', message: 'Expected a base64 PNG, JPG, or WEBP image.' });
+  }
+  if (image.bytes > MAX_IMAGE_BYTES) {
+    return res.status(413).json({ error: 'TOO_LARGE', message: 'Image is too large.' });
+  }
+  if (body.mimeType && body.mimeType !== image.mimeType && !(body.mimeType === 'image/jpg' && image.mimeType === 'image/jpeg')) {
+    return res.status(400).json({ error: 'BAD_REQUEST', message: 'MIME type does not match the image.' });
   }
 
   try {
     const groqRes = await fetch(GROQ_URL, {
-      method:  'POST',
+      method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model:           GROQ_VISION_MODEL,
-        max_tokens:      600,
-        temperature:     0.1,
+        model: GROQ_VISION_MODEL,
+        max_tokens: 600,
+        temperature: 0.1,
         response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: dataUrl } },
-              { type: 'text', text: PROMPT },
-            ],
-          },
-        ],
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl } },
+            { type: 'text', text: PROMPT },
+          ],
+        }],
       }),
     });
 
     if (!groqRes.ok) {
-      const err = await groqRes.json().catch(() => ({}));
-      return res.status(groqRes.status).json({ error: 'GROQ_ERROR', message: err?.error?.message ?? `Groq error ${groqRes.status}` });
+      return res.status(502).json({ error: 'GROQ_ERROR', message: 'The document scanner is temporarily unavailable.' });
     }
 
-    const data    = await groqRes.json();
+    const data = await groqRes.json();
     const content = data.choices?.[0]?.message?.content ?? '{}';
-    const parsed  = JSON.parse(content.replace(/```json|```/g, '').trim());
-
-    return res.status(200).json(parsed);
-  } catch (e) {
-    return res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+    const parsed = JSON.parse(content.replace(/```json|```/g, '').trim());
+    return res.status(200).json(sanitizeResult(parsed));
+  } catch {
+    return res.status(500).json({ error: 'SERVER_ERROR', message: 'The document could not be scanned.' });
   }
 }
