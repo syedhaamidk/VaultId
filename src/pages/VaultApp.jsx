@@ -12,6 +12,7 @@ import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryU
 import { syncVault } from '../sync.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
 import { scanOnDevice } from '../utils/onDeviceScan.js';
+import { logAudit, getAuditLog } from '../crypto.js';
 import {
   supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
   onAuthChange, pushVault, pullVault,
@@ -93,6 +94,7 @@ export default function VaultApp({ onBack }) {
   const [passphraseInput, setPassphraseInput] = useState('');
   const [showScanConsent, setShowScanConsent] = useState(false);
   const [pendingScanFile, setPendingScanFile] = useState(null);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   // ── cloud sync / auth ──
   const [user,       setUser]       = useState(null);
@@ -362,6 +364,7 @@ export default function VaultApp({ onBack }) {
 
   function lockVault() {
     clearClipboardNow();
+    logAudit('lock');
     setPhase('locked');
     setCryptoKey(null);
     setKdfIterations(KDF_ITERATIONS);
@@ -558,6 +561,7 @@ export default function VaultApp({ onBack }) {
         setEmDraft(cloneEmergency(res.emergency || initialEmergency()));
         setUnlockOk(true);
         pinRef.current = np;
+        logAudit('unlock', 'PIN');
         // Offer the v1 → v2 upgrade after a successful v1 unlock.
         if (vaultVersion === 'v1') setShowUpgradePrompt(true);
         setTimeout(() => { setPhase('open'); setPin(''); setUnlockOk(false); }, 550);
@@ -609,6 +613,7 @@ export default function VaultApp({ onBack }) {
       setEmergency(cloneEmergency(res.emergency || initialEmergency()));
       setEmDraft(cloneEmergency(res.emergency || initialEmergency()));
       setUnlockOk(true);
+      logAudit('unlock', 'passphrase');
       // Clear the v1 backup on a successful v2 unlock in a fresh session.
       if (hasV1Backup()) clearV1Backup();
       setTimeout(() => { setPhase('open'); setUnlockOk(false); }, 550);
@@ -985,6 +990,7 @@ export default function VaultApp({ onBack }) {
 
       const wasEditing = Boolean(editingId);
       setDocs(newDocs); setImgs(newImgs);
+      logAudit(wasEditing ? 'edit' : 'add', nd.name);
       resetAdd(); setAddOpen(false);
       showToast(
         result.cloudSynced
@@ -1012,6 +1018,7 @@ export default function VaultApp({ onBack }) {
       }
 
       setDocs(newDocs); setImgs(newImgs);
+      logAudit('delete', docs.find((d) => d.id === id)?.name || '');
       setDocView(null);
       showToast(result.cloudSynced ? 'Document deleted' : 'Deleted locally; cloud sync is currently blocked', result.cloudSynced ? 'ok' : 'err');
     } finally {
@@ -1361,6 +1368,16 @@ export default function VaultApp({ onBack }) {
             <span style={{ flex: 1, fontSize: 13 }}>Back to Site</span>
           </button>
         )}
+        <button
+          type="button"
+          className="anv"
+          style={{ color: 'var(--tx3)' }}
+          data-tip={sbCollapsed ? 'Audit log' : undefined}
+          aria-label="Audit log"
+          onClick={() => setShowAuditLog(true)}
+        >
+          <Clock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Audit Log</span>
+        </button>
         <button
           type="button"
           className="anv"
@@ -1891,6 +1908,39 @@ export default function VaultApp({ onBack }) {
         <div className="fa" style={{ position: 'fixed', bottom: 24, right: 24, display: 'flex', alignItems: 'center', gap: 8, background: toast.type === 'err' ? 'var(--re)' : 'var(--tx)', color: 'var(--bg)', padding: '10px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 200, boxShadow: 'var(--s4)' }}>
           {toast.type === 'err' ? <AlertCircle size={14} /> : <Check size={14} />}
           {toast.txt}
+        </div>
+      )}
+
+      {/* ═══ AUDIT LOG ═══ */}
+      {showAuditLog && (
+        <div className="mbg" onClick={() => setShowAuditLog(false)}>
+          <div className="mbox si" role="dialog" aria-modal="true" aria-label="Audit log" tabIndex={-1} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Audit Log</h3>
+              <button className="abic" aria-label="Close audit log" onClick={() => setShowAuditLog(false)}><span aria-hidden="true">×</span></button>
+            </div>
+            <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {getAuditLog().length === 0 ? (
+                <p style={{ color: 'var(--tx3)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>No activity yet.</p>
+              ) : (
+                [...getAuditLog()].reverse().map((entry, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--tx4)', fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
+                      {new Date(entry.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 600, textTransform: 'capitalize' }}>
+                      {entry.event}
+                    </span>
+                    {entry.details && (
+                      <span style={{ fontSize: 12, color: 'var(--tx3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.details}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

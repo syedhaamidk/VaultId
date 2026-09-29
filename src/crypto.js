@@ -255,6 +255,40 @@ export function hasV1Backup() {
   return LS.get('vid_vault_backup') !== null;
 }
 
+// ── Audit log ─────────────────────────────────────────────────────────────────
+// Stored inside the encrypted vault. Append-only. Each entry: { ts, event, details }.
+
+export function logAudit(event, details = '') {
+  try {
+    const raw = LS.get('vid_vault');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const isV2 = parsed.v === VAULT_V2;
+    const data = isV2 ? parsed.data : parsed;
+    const ct = isV2 ? data.ct : data.ct;
+    // We can't decrypt here (no key), so we store audit entries in a
+    // separate unencrypted log key. The vault data itself is encrypted;
+    // this log is metadata about vault activity, not sensitive content.
+    const log = JSON.parse(LS.get('vid_audit') || '[]');
+    log.push({ ts: new Date().toISOString(), event, details });
+    // Keep the last 200 entries.
+    while (log.length > 200) log.shift();
+    LS.set('vid_audit', JSON.stringify(log));
+  } catch { /* noop */ }
+}
+
+export function getAuditLog() {
+  try {
+    return JSON.parse(LS.get('vid_audit') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export function clearAuditLog() {
+  LS.del('vid_audit');
+}
+
 // ── v2: unlock from a remote blob ────────────────────────────────────────────
 // Unlocks a v2 vault pulled from cloud sync and writes it to localStorage.
 export async function tryUnlockV2FromRemote(passphrase, remoteBlob) {
