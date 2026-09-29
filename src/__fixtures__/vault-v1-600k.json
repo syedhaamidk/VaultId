@@ -1,0 +1,62 @@
+{
+  "pin": "654321",
+  "iterations": 600000,
+  "docs": [
+    {
+      "id": 1,
+      "name": "Aadhar Card",
+      "num": "XXXX XXXX 4521",
+      "cat": "identity",
+      "by": "UIDAI",
+      "issued": "2015-06-10",
+      "expires": null,
+      "notes": "Primary government ID"
+    },
+    {
+      "id": 2,
+      "name": "PAN Card",
+      "num": "ABCDE1234F",
+      "cat": "identity",
+      "by": "Income Tax Dept.",
+      "issued": "2018-03-20",
+      "expires": null,
+      "notes": "Required for transactions ≥ ₹50k"
+    },
+    {
+      "id": 3,
+      "name": "Driver's License",
+      "num": "KA01-2020-0045123",
+      "cat": "identity",
+      "by": "Karnataka RTO",
+      "issued": "2020-03-15",
+      "expires": "2040-03-15",
+      "notes": ""
+    }
+  ],
+  "imgs": {
+    "1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+  },
+  "emergency": {
+    "bloodType": "O+",
+    "allergies": [
+      "Penicillin"
+    ],
+    "medications": [
+      "None currently"
+    ],
+    "conditions": [
+      "Mild myopia (corrected)"
+    ],
+    "contact": {
+      "name": "Mom",
+      "phone": "+91 98765 43210"
+    },
+    "donor": true
+  },
+  "storage": {
+    "vid_salt": "hGOTVxcQXj3UOHrUaOpRkg==",
+    "vid_vault": "{\"iv\":\"Cyw0duCp9JxgxUzu\",\"ct\":\"9g80eqMwJps0K331oe0XFAjJzx0Nctf3z8Dfke1obX3mwKYRYeJNm/4HrUqYaU5I0QTgSKw/Axc1VJxgfLL0p49GnAOmdKIvteSwnLtOqpZIZkNlSVgqxVxvNm7JGVK87MdQczD5Ulz9JVFCEgfwWX2yo1VoGv1irHII+MmTKgbYMN+tXeRu8dEYkE6Q7dt6YyVH0jGvuMtpVgMCensJrwqXkmrpP05eYtRVeAamSf91WRErHaoNtTRbke02vsLPaqkqcb7wfX46rwEsnJck/fCWp4J2e2rdzzUThu56M6L42wVcjGoRvDlVJyRHlSoVtNk4pQFVEOtv6OVku6XFQmxzDdaq1LhNqUMQJr1qg/D48jRvxgYfZlOcNWONSzstE42i2DSYgisUx5wEcCns2iy0p4eTuEccD1XMqmPoQt9i+eCbktHyQ+SxXAAeQArBRonN6lcRMV9c2Q2xJhZlrrjgKnXS4SaQuSBuxCy47IQzvBN/RIh7/QaRiL4ij/zpc3VoRJQaMhfUSl7bLwZMiZD60hprGkmH4x6bSYtyFcCP6+H5YNdFo/3NVHa2fHOpreYAAXZVt8B6qiOTBS75WkT8UM9Xqq7UFT9tp+yM4DvskUC464RQi2XI1uAtahY1pmat/gC6Wa0Ju1vFRELvTM9HxGiXP5vmjBNTl89WqozfMvcrTs+Yw5ICB3qxLYPJOTU1nhXk04NAEXb0tnyExpA1DzLVep+PcUZK21ABH2PlhrJecgiCpRLiLTDqWl1BAy0CQlU85DoOzogFKRaH9kct/1saO8gLMdOOslFoytdW3A0jnnoeew4ksubpvRqW7SzHK9O5g+tC1q5AjMJn6/nJ9ML8CulOViVkNrtzpc2FNH+QKU8NLzfU6+9V9E0I6pt0s/NVIc0mRbhO2ykslSj0PKEG5RY+IhHg4PBWZbptNuldcrbkEZS6dHT2TS/tBYQ3tmohwZatKkzmcrZLaR5urBRKzFDrsuV6f1gq+EaI/Li0e1Kl2maUtv7QT8rU/Wi8FBtWVCqJyXnKiTCZCLlxub/Uw0y69hgCTzvg6RGaK4Kegvik1BFPrJ6oN9bir5W6dK0yma8YeCVRD0JjHVqYixRngRDWgFnM+FVb85LS0Qsp1MlzlMU=\"}",
+    "vid_updated_at": "2026-09-29T14:07:33.154Z",
+    "vid_dirty": "1"
+  }
+}
