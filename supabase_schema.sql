@@ -10,7 +10,8 @@ create table if not exists public.vaults (
   salt        text not null,
   iv          text not null,
   ciphertext  text not null,
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  blob        text  -- v2 self-contained JSON blob; NULL for v1 rows
 );
 
 alter table public.vaults enable row level security;

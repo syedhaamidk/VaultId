@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
-import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2 } from '../crypto.js';
+import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote } from '../crypto.js';
+import { syncVault } from '../sync.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
 import {
   supabaseEnabled, signInWithGoogle, signOut, getCurrentUser,
@@ -435,9 +436,10 @@ export default function VaultApp({ onBack }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── PIN ───────────────────────────────────────────────────────────────────
+  // ── Unlock ─────────────────────────────────────────────────────────────────
   // Prefer the cloud copy when the account is known, but never overwrite a
-  // device that contains unsynced local changes.
+  // device that contains unsynced local changes. Uses the syncVault conflict
+  // matrix to determine the correct action for each local × remote combination.
   async function resolveUnlock(np) {
     const fallbackDocs = DEMO_MODE ? DOCS0 : [];
 
@@ -454,19 +456,63 @@ export default function VaultApp({ onBack }) {
       }
 
       if (remote.found) {
+        // Determine local vault info for the conflict matrix.
+        const localVersion = getVaultVersion();
         const localBlob = exportLocalBlob();
-        if (localBlob?.dirty) {
-          // Never overwrite a device that has unsynced changes. The user can
-          // keep using the local copy and resolve sync explicitly later.
+        const localInfo = {
+          version: localVersion,
+          dirty: localBlob?.dirty ?? false,
+          updatedAt: localBlob?.updatedAt,
+          rev: localVersion === 'v2' ? (JSON.parse(localStorage.getItem('vid_vault'))?.rev ?? 0) : undefined,
+        };
+        const remoteInfo = {
+          found: true,
+          version: remote.version,
+          updatedAt: remote.updatedAt,
+          rev: remote.version === 'v2' ? (JSON.parse(remote.blob.blob)?.rev ?? 0) : undefined,
+        };
+
+        const { action } = syncVault(localInfo, remoteInfo);
+
+        if (action === 'keep-local') {
+          // Never overwrite unsynced local data.
           cloudReadyRef.current = false;
           setSyncBlocked(true);
           setSyncErr('This device has unsynced changes. The cloud vault was not overwritten.');
           return tryUnlock(np, fallbackDocs, initialEmergency());
         }
 
+        if (action === 'upgrade') {
+          // v1 device, v2 remote — prompt to upgrade.
+          cloudReadyRef.current = false;
+          setSyncBlocked(true);
+          setSyncErr('A newer vault format is available. Upgrade this device to sync.');
+          return tryUnlock(np, fallbackDocs, initialEmergency());
+        }
+
+        if (action === 'warn-stale-v1') {
+          // v2 device, v1 remote with newer data — don't overwrite.
+          cloudReadyRef.current = false;
+          setSyncBlocked(true);
+          setSyncErr('A device with the old format has newer data. Upgrade that device to sync.');
+          return tryUnlock(np, fallbackDocs, initialEmergency());
+        }
+
+        // action === 'pull' — unlock from the remote.
+        if (remote.version === 'v2') {
+          const result = await tryUnlockV2FromRemote(np, remote.blob);
+          if (result.ok) {
+            cloudReadyRef.current = true;
+            setSyncBlocked(false);
+            setSyncErr(null);
+          }
+          return result;
+        }
+
+        // v1 remote.
         const remoteBlob = {
-          saltB64: remote.salt,
-          enc: remote.enc,
+          saltB64: remote.blob.saltB64,
+          enc: remote.blob.encBlob,
           updatedAt: remote.updatedAt,
         };
         const result = await tryUnlockFromRemote(np, remoteBlob);
@@ -475,8 +521,6 @@ export default function VaultApp({ onBack }) {
           setSyncBlocked(false);
           setSyncErr(null);
         }
-        // Never fall through to local initialization when a remote row exists:
-        // that would allow a wrong PIN or stale local copy to replace it.
         return result;
       }
 
@@ -581,7 +625,7 @@ export default function VaultApp({ onBack }) {
     }
 
     setSyncing(true);
-    const result = await pushVault(user.id, blob.saltB64, blob.enc, blob.updatedAt);
+    const result = await pushVault(user.id, blob, blob.updatedAt);
     setSyncing(false);
     if (!result.ok) {
       setSyncErr(`Cloud sync failed: ${result.reason}`);

@@ -255,6 +255,38 @@ export function hasV1Backup() {
   return LS.get('vid_vault_backup') !== null;
 }
 
+// ── v2: unlock from a remote blob ────────────────────────────────────────────
+// Unlocks a v2 vault pulled from cloud sync and writes it to localStorage.
+export async function tryUnlockV2FromRemote(passphrase, remoteBlob) {
+  try {
+    const parsed = JSON.parse(remoteBlob.blob);
+    const result = await unlockVaultV2(passphrase, parsed);
+    if (!result.ok) return { ok: false };
+
+    // Write to localStorage for offline access.
+    const previousVault = LS.get('vid_vault');
+    if (!LS.set('vid_vault', remoteBlob.blob)) {
+      if (previousVault) LS.set('vid_vault', previousVault);
+      return { ok: false, reason: 'STORAGE_WRITE_FAILED' };
+    }
+    LS.set('vid_updated_at', remoteBlob.updatedAt || new Date().toISOString());
+    LS.set('vid_dirty', '0');
+
+    return {
+      ok: true,
+      key: result.key,
+      docs: result.docs,
+      imgs: result.imgs,
+      emergency: result.emergency,
+      rev: result.rev,
+      blob: result.blob,
+      updatedAt: remoteBlob.updatedAt,
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // ── v2: create ───────────────────────────────────────────────────────────────
 export async function createVaultV2(passphrase, docs = [], imgs = {}, emergency = {}) {
   try {
