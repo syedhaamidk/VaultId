@@ -3,6 +3,8 @@ import { Shield, Sparkles, Zap, Clock, Globe, Lock, ShieldCheck } from 'lucide-r
 import CardNav from '../components/CardNav.jsx';
 import { Button, Card, Badge, TiltCard, Reveal } from '@chomuiro/saisei/react';
 import { useLowEndDevice } from '../utils/useLowEndDevice.js';
+import { usePwaInstall } from '../utils/usePwaInstall.js';
+import { Download } from 'lucide-react';
 
 const SideRays = lazy(() => import('../components/SideRays.jsx'));
 import { NAV_ITEMS, FEATS } from '../data.js';
@@ -31,6 +33,7 @@ const NavLogo = (
 
 export default function LandingPage({ onEnterVault, onPrivacy }) {
   const isLowEnd = useLowEndDevice();
+  const { canInstall, installed, promptInstall } = usePwaInstall();
 
   return (
     <div className="site" style={{ minHeight: '100vh' }}>
@@ -91,6 +94,15 @@ export default function LandingPage({ onEnterVault, onPrivacy }) {
             >
               See How It Works
             </Button>
+            {canInstall && !installed && (
+              <Button
+                variant="ghost"
+                onClick={promptInstall}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Download size={14} />Install App
+              </Button>
+            )}
           </div>
         </div>
       </section>

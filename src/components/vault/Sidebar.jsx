@@ -1,8 +1,9 @@
 import {
   ShieldCheck, ChevronRight, Zap, Bell, Lock, Globe, LogOut,
-  Loader2, Download, Upload, Clock, CreditCard, Activity, Wallet, Home, Scale, FolderOpen,
+  Loader2, Download, Upload, Clock, CreditCard, Activity, Wallet, Home, Scale, FolderOpen, Smartphone,
 } from 'lucide-react';
 import { VAULT_CAT } from '../../data.js';
+import { usePwaInstall } from '../../utils/usePwaInstall.js';
 
 const CAT_ICONS = {
   all: FolderOpen, identity: CreditCard, medical: Activity,
@@ -17,6 +18,7 @@ export default function Sidebar({
   onPinChange, onExport, onImport, onAuditLog, onLock, onBack, user, authBusy,
   onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled,
 }) {
+  const { canInstall, installed, promptInstall } = usePwaInstall();
   return (
     <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={{ width: sbCollapsed ? 64 : 215, background: 'var(--gl)', backdropFilter: 'blur(20px)', borderRight: '1px solid var(--bd)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto' }}>
       <div style={{ padding: '8px 10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -84,6 +86,11 @@ export default function Sidebar({
       <button type="button" className="anv" style={{ color: 'var(--tx3)' }} data-tip={sbCollapsed ? 'Import vault' : undefined} aria-label="Import vault" onClick={onImport}>
         <Upload size={15} /><span style={{ flex: 1, fontSize: 13 }}>Import</span>
       </button>
+      {canInstall && !installed && (
+        <button type="button" className="anv" style={{ color: 'var(--tx3)' }} data-tip={sbCollapsed ? 'Install app' : undefined} aria-label="Install app" onClick={promptInstall}>
+          <Smartphone size={15} /><span style={{ flex: 1, fontSize: 13 }}>Install App</span>
+        </button>
+      )}
 
       {supabaseEnabled && (
         user ? (
