@@ -823,6 +823,51 @@ export default function VaultApp({ onBack }) {
     setPinModal(true);
   }
 
+  // ── Export / Import ──────────────────────────────────────────────────────
+  function exportVault() {
+    const raw = localStorage.getItem('vid_vault');
+    if (!raw) return showToast('No vault to export', 'err');
+    try {
+      const exportData = {
+        type: 'vaultid-export',
+        version: getVaultVersion(),
+        exportedAt: new Date().toISOString(),
+        blob: JSON.parse(raw),
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vaultid-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('Vault exported (encrypted)');
+    } catch {
+      showToast('Export failed', 'err');
+    }
+  }
+
+  function importVault(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.type !== 'vaultid-export' || !data.blob) {
+          showToast('Invalid backup file', 'err');
+          return;
+        }
+        localStorage.setItem('vid_vault', JSON.stringify(data.blob));
+        showToast('Vault imported — reloading…');
+        setTimeout(() => window.location.reload(), 1000);
+      } catch {
+        showToast('Could not import vault', 'err');
+      }
+    };
+    reader.readAsText(file);
+  }
+
   // ── Download helpers ─────────────────────────────────────────────────────
   async function downloadJPEG(doc) {
     const dataUrl = imgs[doc.id];
@@ -1288,6 +1333,33 @@ export default function VaultApp({ onBack }) {
             <span style={{ flex: 1, fontSize: 13 }}>Back to Site</span>
           </button>
         )}
+        <button
+          type="button"
+          className="anv"
+          style={{ color: 'var(--tx3)' }}
+          data-tip={sbCollapsed ? 'Export vault' : undefined}
+          aria-label="Export vault"
+          onClick={exportVault}
+        >
+          <Download size={15} /><span style={{ flex: 1, fontSize: 13 }}>Export</span>
+        </button>
+        <button
+          type="button"
+          className="anv"
+          style={{ color: 'var(--tx3)' }}
+          data-tip={sbCollapsed ? 'Import vault' : undefined}
+          aria-label="Import vault"
+          onClick={() => document.getElementById('import-file-input')?.click()}
+        >
+          <Upload size={15} /><span style={{ flex: 1, fontSize: 13 }}>Import</span>
+        </button>
+        <input
+          id="import-file-input"
+          type="file"
+          accept=".json,application/json"
+          style={{ display: 'none' }}
+          onChange={(e) => { if (e.target.files[0]) importVault(e.target.files[0]); e.target.value = ''; }}
+        />
         <button
           type="button"
           className="anv"
