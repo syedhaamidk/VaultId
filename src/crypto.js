@@ -255,6 +255,59 @@ export function hasV1Backup() {
   return LS.get('vid_vault_backup') !== null;
 }
 
+// ── WebAuthn biometric unlock ─────────────────────────────────────────────────
+// Uses the WebAuthn PRF extension to derive a key from the assertion,
+// which wraps the DEK. The DEK is stored in a 'webauthn' slot.
+
+async function getWebAuthnPrfKey(credentialId, challenge) {
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      allowCredentials: credentialId ? [{ type: 'public-key', id: credentialId }] : [],
+      userVerification: 'preferred',
+      extensions: {
+        prf: { eval: { first: new Uint8Array(32) } },
+      },
+    },
+  });
+  const prfResults = assertion.getClientExtensionResults()?.prf?.results?.first;
+  if (!prfResults) throw new Error('PRF not supported');
+  return crypto.subtle.importKey('raw', prfResults, { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey']);
+}
+
+export async function registerWebAuthn() {
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: 'VaultID' },
+        user: { id: userId, name: 'vaultid-user', displayName: 'VaultID User' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { userVerification: 'preferred' },
+        extensions: {
+          prf: { eval: { first: new Uint8Array(32) } },
+        },
+      },
+    });
+    const prfKey = await getWebAuthnPrfKey(credential.rawId, challenge);
+    return { ok: true, credentialId: credential.rawId, prfKey };
+  } catch (e) {
+    return { ok: false, reason: e?.message || 'WEBAUTHN_REGISTER_FAILED' };
+  }
+}
+
+export async function unlockWithWebAuthn(credentialId) {
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const prfKey = await getWebAuthnPrfKey(credentialId, challenge);
+    return { ok: true, key: prfKey };
+  } catch (e) {
+    return { ok: false, reason: e?.message || 'WEBAUTHN_UNLOCK_FAILED' };
+  }
+}
+
 // ── Audit log ─────────────────────────────────────────────────────────────────
 // Stored inside the encrypted vault. Append-only. Each entry: { ts, event, details }.
 
