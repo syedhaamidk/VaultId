@@ -306,7 +306,9 @@ export async function changePassphraseV2(oldPassphrase, newPassphrase, blob) {
 }
 
 // ── v2: add recovery slot (opt-in) ───────────────────────────────────────────
-export async function addRecoverySlotV2(passphrase, blob) {
+// If recoveryKeyB64 is provided, uses that key (UI-generated, shown once).
+// If omitted, generates one (tests, programmatic use).
+export async function addRecoverySlotV2(passphrase, blob, recoveryKeyB64 = null) {
   try {
     const slot = blob.slots.find((s) => s.type === 'passphrase');
     if (!slot) return { ok: false, reason: 'NO_PASSPHRASE_SLOT' };
@@ -315,12 +317,22 @@ export async function addRecoverySlotV2(passphrase, blob) {
     const slotMeta = { type: 'passphrase', kdf: slot.kdf, salt: slot.salt };
     const dek = await unwrapDEK(slot.wrapped, kek, canonicalize(slotMeta), true);
 
-    // Generate a random 256-bit recovery key.
-    const recoveryKey = await crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 }, true, ['wrapKey', 'unwrapKey'],
-    );
-    const recoveryKeyRaw = await crypto.subtle.exportKey('raw', recoveryKey);
-    const recoveryKeyB64 = buf2b64(recoveryKeyRaw);
+    let recoveryKey;
+    let generatedKeyB64 = null;
+    if (recoveryKeyB64) {
+      // Import the UI-generated key.
+      recoveryKey = await crypto.subtle.importKey(
+        'raw', b642buf(recoveryKeyB64),
+        { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey'],
+      );
+    } else {
+      // Generate a random 256-bit recovery key.
+      recoveryKey = await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 }, true, ['wrapKey', 'unwrapKey'],
+      );
+      const recoveryKeyRaw = await crypto.subtle.exportKey('raw', recoveryKey);
+      generatedKeyB64 = buf2b64(recoveryKeyRaw);
+    }
 
     const wrapped = await wrapDEK(dek, recoveryKey, canonicalize({ type: 'recovery' }));
     const recoverySlot = { type: 'recovery', wrapped };
@@ -337,7 +349,8 @@ export async function addRecoverySlotV2(passphrase, blob) {
     if (!LS.set('vid_vault', JSON.stringify(newBlob))) {
       return { ok: false, reason: 'STORAGE_WRITE_FAILED' };
     }
-    return { ok: true, recoveryKey: recoveryKeyB64, blob: newBlob, rev: header.rev };
+    // Return the generated key only if we generated it (not if UI-provided).
+    return { ok: true, recoveryKey: generatedKeyB64, blob: newBlob, rev: header.rev };
   } catch (e) {
     return { ok: false, reason: e?.message || 'RECOVERY_SLOT_FAILED' };
   }
