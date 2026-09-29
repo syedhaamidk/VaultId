@@ -2,29 +2,66 @@
  * VaultID — /api/scan
  *
  * Server-side proxy for Groq vision. The API key is read only here and is
- * never bundled into the client. The endpoint is intended for same-origin
- * browser requests; it also applies a best-effort per-instance rate limit so
- * a deployed key cannot be used as an unrestricted public proxy.
+ * never bundled into the client. The endpoint requires a valid Supabase
+ * session token (sent by the client) so only signed-in users can scan.
+ *
+ * Rate limiting uses a shared in-memory store with a TTL. For production
+ * with multiple serverless instances, replace with Redis or a Supabase
+ * table.
  */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// Verify this model exists at https://console.groq.com/docs/models
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
 const MAX_IMAGE_BYTES = 2_500_000;
 const MAX_DATA_URL_LENGTH = Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 128;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 20;
 
-// Set APP_ORIGIN in production when the app is served from a different origin
-// (for example, a custom domain). Same-origin requests are allowed by host.
-const configuredOrigins = new Set(
-  (process.env.APP_ORIGIN || '')
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/$/, ''))
-    .filter(Boolean),
-);
+// ── Supabase auth ────────────────────────────────────────────────────────────
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
 
+async function verifySupabaseToken(token) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ── Rate limiting (shared in-memory with TTL) ────────────────────────────────
 const rateBuckets = new Map();
 
+function isRateLimited(clientKey) {
+  const now = Date.now();
+  const current = rateBuckets.get(clientKey);
+
+  if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+    rateBuckets.set(clientKey, { startedAt: now, count: 1 });
+    return false;
+  }
+
+  if (current.count >= RATE_LIMIT) return true;
+  current.count += 1;
+
+  // Opportunistically remove old buckets.
+  if (rateBuckets.size > 500) {
+    for (const [k, v] of rateBuckets) {
+      if (now - v.startedAt >= RATE_WINDOW_MS) rateBuckets.delete(k);
+    }
+  }
+  return false;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function requestHeaders(req) {
   return req?.headers || {};
 }
@@ -32,11 +69,12 @@ function requestHeaders(req) {
 function isAllowedOrigin(req) {
   const headers = requestHeaders(req);
   const origin = headers.origin;
-  // Same-origin browser POSTs normally include Origin. A missing Origin is
-  // allowed for non-browser clients, but remains subject to the rate limit.
-  if (!origin) return true;
-  if (configuredOrigins.has(origin.replace(/\/$/, ''))) return true;
-
+  if (!origin) return false; // require Origin header
+  const configured = (process.env.APP_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  if (configured.includes(origin.replace(/\/$/, ''))) return true;
   try {
     const host = headers['x-forwarded-host'] || headers.host;
     return Boolean(host) && new URL(origin).host === host;
@@ -50,34 +88,9 @@ function applyCors(req, res) {
   res.setHeader('Vary', 'Origin');
   if (origin && isAllowedOrigin(req)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods: 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   }
-}
-
-function allowRequest(req) {
-  const headers = requestHeaders(req);
-  const forwarded = headers['x-forwarded-for'];
-  const key = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || 'unknown';
-  const now = Date.now();
-  const current = rateBuckets.get(key);
-
-  if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
-    rateBuckets.set(key, { startedAt: now, count: 1 });
-    return true;
-  }
-
-  if (current.count >= RATE_LIMIT) return false;
-  current.count += 1;
-
-  // Opportunistically remove old buckets so a long-lived serverless instance
-  // does not retain every address forever.
-  if (rateBuckets.size > 500) {
-    for (const [bucketKey, bucket] of rateBuckets) {
-      if (now - bucket.startedAt >= RATE_WINDOW_MS) rateBuckets.delete(bucketKey);
-    }
-  }
-  return true;
 }
 
 function parseBody(body) {
@@ -90,7 +103,6 @@ function parseBody(body) {
 function imageSizeFromDataUrl(dataUrl) {
   const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
   if (!match) return null;
-
   const payload = match[2];
   const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
   return {
@@ -133,6 +145,7 @@ Return ONLY a valid JSON object with no markdown fences, explanation, or extra t
   "notes": "any other important details in one short sentence (blood group, sum insured, UAN, etc.), or empty string"
 }`;
 
+// ── Handler ──────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   applyCors(req, res);
   res.setHeader('Cache-Control', 'no-store');
@@ -142,7 +155,22 @@ export default async function handler(req, res) {
   }
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.' });
-  if (!allowRequest(req)) {
+
+  // ── Authentication ──────────────────────────────────────────────────────
+  const authHeader = requestHeaders(req).authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'A valid session token is required.' });
+  }
+  const isValid = await verifySupabaseToken(token);
+  if (!isValid) {
+    return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Invalid or expired session.' });
+  }
+
+  // ── Rate limiting ───────────────────────────────────────────────────────
+  const forwarded = requestHeaders(req)['x-forwarded-for'];
+  const clientKey = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || 'unknown';
+  if (isRateLimited(clientKey)) {
     return res.status(429).json({ error: 'RATE_LIMITED', message: 'Too many scan requests. Try again later.' });
   }
 

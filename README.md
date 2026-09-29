@@ -1,92 +1,242 @@
-# VaultID
+<div align="center">
 
-Military-grade encrypted document vault built with React + Vite.
+# 🔐 VaultID
 
-## Stack
+**Zero-Knowledge Encrypted Document Vault**
 
-| Layer | Tech |
-|---|---|
-| Framework | React 18 + Vite 5 |
-| Encryption | AES-256-GCM · PBKDF2 600k iterations · Web Crypto API |
-| Storage | localStorage (encrypted blob only), optional Supabase sync |
-| Auth | Google OAuth via Supabase Auth (optional) |
-| AI Scanning | Groq vision model, proxied server-side via `api/scan.js` (2.5 MB image limit) |
-| 3D Effects | Three.js WebGL (SideRays shader) |
-| Nav animation | GSAP (CardNav) |
-| Icons | Lucide React |
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev)
+[![Web Crypto](https://img.shields.io/badge/Web_Crypto-AES--256--GCM-7B6FE8)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
+[![PWA](https://img.shields.io/badge/PWA-Offline%20Ready-34D399)](https://web.dev/progressive-web-apps)
 
-## Architecture
+**Your documents. Your device. Your keys.**
+
+[Live Demo](https://vault-id-pearl.vercel.app) · [Report Bug](https://github.com/syedhaamidk/VaultId/issues) · [Request Feature](https://github.com/syedhaamidk/VaultId/issues)
+
+</div>
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔐 **AES-256-GCM** | Military-grade encryption, keys derived locally with PBKDF2 (600k iterations) |
+| 🧠 **AI Document Scan** | On-device OCR (Tesseract.js) or Groq AI — your choice, your privacy |
+| 🔑 **Zero-Knowledge** | Your documents are encrypted on your device. We never see your plaintext. |
+| 📱 **PWA** | Installable, offline-ready, works like a native app |
+| 🔄 **Cloud Sync** | Optional Supabase sync — only encrypted bytes leave your device |
+| 📋 **Document Versioning** | Every edit is versioned. Restore any previous version. |
+| 🚨 **Emergency Card** | Medical ID with QR code, generated locally — no third-party QR service |
+| 📊 **Audit Log** | Track every unlock, edit, and delete — stored inside your encrypted vault |
+| 🔗 **Secure Sharing** | Encrypted, expiring share links for documents |
+| 🇮🇳 **India-Ready** | Aadhaar (Verhoeff checksum) and PAN validation built in |
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────┐      ┌──────────────────┐
-│          Browser (client)            │      │  api/scan.js      │
-│                                     │      │  (serverless)      │
-│  PIN ──► PBKDF2 ──► AES-256 key    │      │                    │
-│                          │          │      │  GROQ_API_KEY      │
-│  Documents ──► encrypt ──► localStorage     │  lives here only  │
-│                          │          │      └─────────┬──────────┘
-│  image ──────────────────┼──────────┼────────────────┘
-│  (key lives only in session memory) │     forwards to Groq,
-└──────────────┬──────────────────────┘     returns parsed fields
-               │ (signed in only)
-               ▼
-      encrypted blob {iv, salt, ciphertext}
-               │
-               ▼
-        Supabase Postgres (RLS: owner-only)
+┌─────────────────────────────────────────────────────────────┐
+│                      Your Device                            │
+│                                                             │
+│  ┌─────────────┐    PBKDF2     ┌──────────────┐            │
+│  │  PIN /      │──────────────►│  KEK         │            │
+│  │  Passphrase │               │  (wraps DEK) │            │
+│  └─────────────┘               └──────┬───────┘            │
+│                                       │                    │
+│                              ┌────────▼────────┐           │
+│                              │  DEK (AES-256)  │           │
+│                              │  unwraps non-   │           │
+│                              │  extractable    │           │
+│                              └────────┬────────┘           │
+│                                       │                    │
+│  ┌─────────────┐    AES-256-GCM    ┌──▼──────────────┐    │
+│  │  Documents  │◄──────────────────│  Encrypted      │    │
+│  │  Images     │                   │  Vault Blob     │    │
+│  │  Emergency  │                   │  {v,rev,slots,  │    │
+│  └─────────────┘                   │   data}         │    │
+│                                    └────────┬────────┘    │
+│                                             │              │
+│  ┌─────────────┐                           │              │
+│  │ localStorage│◄──────────────────────────┘              │
+│  │ (encrypted) │                                          │
+│  └─────────────┘                                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ (optional sync — encrypted blob only)
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Supabase (optional)                       │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  vaults table: { user_id, salt, iv, ciphertext }    │   │
+│  │  RLS: owner-only                                    │   │
+│  │  Server sees ONLY encrypted bytes — never plaintext  │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Zero-knowledge: the server never receives plaintext documents or your PIN — only AES-256-GCM ciphertext (for sync) and the raw image for AI scanning (which the proxy forwards to Groq but never persists).
+---
 
-## Quick start
+## 🔒 Security Model
 
-Requires Node.js `20.19+` (or `22.12+`).
+| Layer | What | Where |
+|-------|------|-------|
+| **Encryption** | AES-256-GCM | Client-side (Web Crypto API) |
+| **Key Derivation** | PBKDF2-SHA256, 600k iterations | Client-side |
+| **Key Storage** | Non-extractable CryptoKey | Session memory only |
+| **Data Storage** | Encrypted blob in localStorage | Your device |
+| **Cloud Sync** | Encrypted blob only | Supabase (optional) |
+| **AI Scanning** | On-device (Tesseract.js) or Groq AI | Your choice |
+| **Server Access** | None — zero-knowledge | We cannot decrypt your vault |
+
+> **Your documents are encrypted on your device before they are stored or synced. We never see your plaintext — only encrypted bytes.**
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20.19+ or 22.12+
+- npm
+
+### Install & Run
 
 ```bash
-git clone ...
-cd vaultid
+git clone https://github.com/syedhaamidk/VaultId.git
+cd VaultId
 npm install
-cp .env.example .env        # add GROQ_API_KEY (server-side) and, optionally, Supabase config
-npm run dev                 # for full local testing of /api/scan.js, use `vercel dev` instead
+cp .env.example .env    # add GROQ_API_KEY (server-side)
+npm run dev
 ```
 
-## Project structure
+### Build for Production
+
+```bash
+npm run build
+npm run preview
+```
+
+### Run Tests
+
+```bash
+npm test
+```
+
+---
+
+## 🔧 Configuration
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | Yes (for AI scan) | Server-side Groq API key. Never bundled into client. |
+| `VITE_SUPABASE_URL` | No | Supabase project URL (enables cloud sync). |
+| `VITE_SUPABASE_ANON_KEY` | No | Supabase anon key (enables cloud sync). |
+| `VITE_DEMO_MODE` | No | Set to `true` to show demo PIN hint. Default: `false`. |
+| `GROQ_VISION_MODEL` | No | Override the Groq vision model. |
+| `APP_ORIGIN` | No | Comma-separated allowed origins for /api/scan. |
+
+---
+
+## 📁 Project Structure
 
 ```
 src/
-├── main.jsx                # React entry
-├── App.jsx                 # Page router (landing ↔ vault)
-├── index.css               # Global styles, CSS vars, animations
-├── crypto.js               # AES-256-GCM, PBKDF2, localStorage vault, remote-unlock helpers
-├── sync.js                 # Google auth + encrypted vault push/pull (Supabase)
-├── supabaseClient.js       # Supabase client singleton (no-ops if unconfigured)
-├── data.js                 # Constants, demo docs, emergency info
-├── utils.jsx               # Badge, TiltCard, DocForm components
+├── main.jsx               # Entry point, SW registration
+├── App.jsx                # Route: landing ↔ vault ↔ privacy
+├── crypto.js              # AES-256-GCM, PBKDF2, v2 vault format, key wrapping
+├── sync.js                # Supabase auth + encrypted blob sync + conflict matrix
+├── supabaseClient.js      # Supabase client singleton
+├── data.js                # Constants, demo data, feature cards
+├── utils.jsx              # Badge, TiltCard, DocForm, compressImage
+├── index.css              # Theme tokens, animations, mobile/PWA styles
 ├── components/
-│   ├── BorderGlow.jsx/.css # Mouse-tracking edge glow cards
-│   ├── CardNav.jsx/.css    # GSAP-animated hamburger nav
-│   └── SideRays.jsx/.css   # Three.js WebGL god-ray effect
-└── pages/
-    ├── LandingPage.jsx     # Marketing site
-    └── VaultApp.jsx        # Full encrypted vault application
+│   ├── SideRays.jsx       # WebGL god-ray effect (Three.js)
+│   ├── CardNav.jsx        # GSAP-animated navigation
+│   ├── PassphraseSetup.jsx # Passphrase creation modal
+│   └── vault/
+│       ├── LockScreen.jsx # v1 PIN keypad + v2 passphrase field
+│       ├── Sidebar.jsx    # Navigation, categories, sync, export/import
+│       ├── DocumentCard.jsx # Document grid card
+│       ├── DocumentModal.jsx # Document detail view
+│       └── Modals.jsx     # Add, Emergency, ChangePin, Upgrade, ScanConsent, AuditLog
+├── pages/
+│   ├── LandingPage.jsx    # Marketing site
+│   ├── VaultApp.jsx       # Main vault application
+│   └── PrivacyPolicy.jsx  # Privacy policy page
+├── utils/
+│   ├── passphraseStrength.js  # Shannon entropy strength meter
+│   ├── passphraseValidation.js # Pure validation logic
+│   ├── documentValidation.js   # Aadhaar (Verhoeff) + PAN validation
+│   ├── onDeviceScan.js         # Tesseract.js OCR
+│   ├── useLowEndDevice.js      # Low-end device detection
+│   └── usePwaInstall.js        # PWA install prompt hook
+└── __fixtures__/
+    ├── vault-v1-100k.json  # Frozen v1 test fixture (100k iterations)
+    └── vault-v1-600k.json  # Frozen v1 test fixture (600k iterations)
 
 api/
-└── scan.js                 # Serverless proxy — holds GROQ_API_KEY server-side,
-                             # client never sees the key or calls Groq directly
+└── scan.js                # Serverless Groq proxy (authenticated, rate-limited)
 
-supabase_schema.sql          # Table + RLS policies for encrypted vault sync
+public/
+├── manifest.json          # PWA manifest
+├── sw.js                  # Service worker (offline support)
+├── icon.svg               # App icon
+└── offline.html           # Offline fallback page
 ```
 
-## Security notes
+---
 
-- PIN is **never stored** anywhere. It drives PBKDF2 to derive the AES key, which lives only in React state.
-- Wrong PIN → wrong key → AES-GCM auth tag fails → graceful error.
-- Document images are stored as base64 inside the encrypted blob; emergency-card details are encrypted with the same vault key.
-- The emergency QR is generated locally in the browser. Medical/contact data is never sent to a third-party QR service.
-- The scan endpoint accepts same-origin requests, validates image payloads, and applies a best-effort rate limit. Set `GROQ_API_KEY` only in the server environment.
-- The Groq API key is **server-side only** (`GROQ_API_KEY`, no `VITE_` prefix) — see `api/scan.js`. It is never bundled into client JS.
-- Google sign-in (via Supabase Auth) only establishes identity for Row-Level-Security; it never participates in encryption. On a clean device, the cloud vault is checked before local initialization so a local copy cannot overwrite it. Supabase only stores `{iv, salt, ciphertext}`.
+## 🧪 Testing
 
-## PWA
+```bash
+npm test          # Run all tests (Vitest)
+```
 
-Add a `public/manifest.json` and register a service worker in `main.jsx` to enable "Add to Home Screen" and offline support.
+**74 tests** covering:
+- Crypto round-trip, wrong key, tamper detection, IV uniqueness
+- v1 → v2 migration, changePassphrase, recovery slot, storage failure
+- NFKC equivalence, slot removal, version detection
+- Sync guard, conflict matrix, v1/v2 push/pull
+- Passphrase validation, strength estimation
+- Aadhaar (Verhoeff) and PAN validation
+
+---
+
+## 📱 PWA
+
+VaultID is a Progressive Web App:
+
+- **Installable** — "Install App" button appears when supported
+- **Offline-ready** — service worker caches the app shell
+- **Responsive** — mobile bottom nav, safe-area insets, 44×44px touch targets
+- **Reduced motion** — respects `prefers-reduced-motion`
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**🔐 Your documents. Your device. Your keys.**
+
+Built with [React](https://react.dev) · [Vite](https://vite.dev) · [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
+
+</div>

@@ -28,10 +28,17 @@ async function scanDocumentWithAI(file) {
   });
   const dataUrl = `data:${file.type};base64,${b64}`;
 
+  // Send the Supabase session token for authentication.
+  const session = await supabase?.auth.getSession?.();
+  const token = session?.data?.session?.access_token;
+
   const res = await fetch('/api/scan', {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ dataUrl, mimeType: file.type }),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ dataUrl, mimeType: file.type }),
   });
 
   const data = await res.json().catch(() => ({}));
