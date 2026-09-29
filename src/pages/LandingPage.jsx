@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Shield, Sparkles, Zap, Clock, Globe, Lock, ShieldCheck } from 'lucide-react';
 import CardNav from '../components/CardNav.jsx';
 import { Button, Card, Badge, TiltCard, Reveal } from '@chomuiro/saisei/react';
+import { useLowEndDevice } from '../utils/useLowEndDevice.js';
 
 const SideRays = lazy(() => import('../components/SideRays.jsx'));
 import { NAV_ITEMS, FEATS } from '../data.js';
@@ -29,6 +30,8 @@ const NavLogo = (
 );
 
 export default function LandingPage({ onEnterVault }) {
+  const isLowEnd = useLowEndDevice();
+
   return (
     <div className="site" style={{ minHeight: '100vh' }}>
 
@@ -40,22 +43,29 @@ export default function LandingPage({ onEnterVault }) {
         ease="power3.out"
       />
 
-      {/* ── Hero (WebGL backdrop kept — outside the kit's scope) ─────────────── */}
+      {/* ── Hero (WebGL backdrop, CSS fallback for low-end devices) ────────── */}
       <section className="hero">
-        <Suspense fallback={null}>
-          {/* Primary god-ray (top-right, purple/indigo) */}
-          <SideRays
-            rayColor1="#7B6FE8" rayColor2="#C060F0"
-            intensity={2.4} spread={2.4} opacity={0.85}
-            origin="top-right"
-          />
-          {/* Secondary accent ray (bottom-left, teal) */}
-          <SideRays
-            rayColor1="#3B82F6" rayColor2="#34D399"
-            intensity={1.4} spread={1.8} opacity={0.4}
-            origin="bottom-left"
-          />
-        </Suspense>
+        {isLowEnd ? (
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'radial-gradient(ellipse at top right, rgba(123,111,232,.25) 0%, transparent 60%), radial-gradient(ellipse at bottom left, rgba(59,130,246,.15) 0%, transparent 60%)',
+          }} />
+        ) : (
+          <Suspense fallback={null}>
+            {/* Primary god-ray (top-right, purple/indigo) */}
+            <SideRays
+              rayColor1="#7B6FE8" rayColor2="#C060F0"
+              intensity={2.4} spread={2.4} opacity={0.85}
+              origin="top-right"
+            />
+            {/* Secondary accent ray (bottom-left, teal) */}
+            <SideRays
+              rayColor1="#3B82F6" rayColor2="#34D399"
+              intensity={1.4} spread={1.8} opacity={0.4}
+              origin="bottom-left"
+            />
+          </Suspense>
+        )}
 
         <div className="hero-content">
           <Badge tone="accent"><Shield size={12} /> AES-256-GCM · Zero-Knowledge · AI-Powered</Badge>
