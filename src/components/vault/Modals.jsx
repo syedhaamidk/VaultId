@@ -289,21 +289,21 @@ export function ScanConsent({ showScanConsent, onClose, onGroq, onDevice }) {
           Your document image can be scanned in two ways:
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--grs)', borderRadius: 10, border: '1px solid rgba(52,211,153,.3)' }}>
+            <Shield size={16} style={{ color: 'var(--gr)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan on-device <span style={{ fontSize: 10, color: 'var(--gr)', fontWeight: 700, marginLeft: 4 }}>RECOMMENDED</span></div>
+              <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
+                Your image never leaves this device. Fully private — no third-party processing.
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
             <Sparkles size={16} style={{ color: 'var(--ac1)', flexShrink: 0, marginTop: 2 }} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan with Groq AI</div>
               <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
                 Faster and more accurate. Your image is sent to Groq's servers for processing.
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
-            <Shield size={16} style={{ color: 'var(--gr)', flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx)' }}>Scan on-device</div>
-              <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
-                Your image never leaves this device. Slower and less accurate, but fully private.
               </div>
             </div>
           </div>

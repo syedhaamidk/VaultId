@@ -29,7 +29,7 @@ const NavLogo = (
   </div>
 );
 
-export default function LandingPage({ onEnterVault }) {
+export default function LandingPage({ onEnterVault, onPrivacy }) {
   const isLowEnd = useLowEndDevice();
 
   return (
@@ -68,7 +68,7 @@ export default function LandingPage({ onEnterVault }) {
         )}
 
         <div className="hero-content">
-          <Badge tone="accent"><Shield size={12} /> AES-256-GCM · Zero-Knowledge · AI-Powered</Badge>
+          <Badge tone="accent"><Shield size={12} /> AES-256-GCM · Zero-Knowledge · On-Device AI</Badge>
 
           <h1>
             Store every document.<br />
@@ -76,8 +76,9 @@ export default function LandingPage({ onEnterVault }) {
           </h1>
 
           <p>
-            Your Aadhar, passport, medical records, and insurance — secured with
-            military-grade encryption and accessible the moment you need them.
+            Your Aadhar, passport, medical records, and insurance — encrypted on
+            your device with AES-256-GCM. We never see your plaintext. Your data
+            stays yours.
           </p>
 
           <div className="hero-btns">
@@ -153,7 +154,7 @@ export default function LandingPage({ onEnterVault }) {
           <div className="how-steps">
             {[
               { n: '01', t: 'Set your PIN',        d: 'Your PIN drives PBKDF2 to derive an AES-256 key. It never leaves your device — not even in memory after you lock.',          col: '#7B6FE8' },
-              { n: '02', t: 'Add documents',       d: "Upload a photo — Groq's vision model reads it and extracts the document type, number, issuer, and expiry dates instantly.",      col: '#C060F0' },
+              { n: '02', t: 'Add documents',       d: "Upload a photo — scan on-device (your image never leaves this device) or with Groq AI for faster, more accurate extraction.", col: '#C060F0' },
               { n: '03', t: 'Access anywhere',     d: 'Encrypted vault loads on any device. Optionally sync via Supabase — zero-knowledge, because the server only sees ciphertext.', col: '#34D399' },
             ].map(({ n, t, d, col }, i) => (
               <Reveal key={n} delay={i * 100}>
@@ -198,12 +199,29 @@ export default function LandingPage({ onEnterVault }) {
           </span>
         </div>
         <p>AES-256-GCM encrypted · Zero-knowledge · Privacy by design</p>
+        <p style={{ fontSize: 12, color: '#AAAACC', maxWidth: 480, margin: '8px auto 0', lineHeight: 1.6 }}>
+          Your documents are encrypted on your device before they are stored or synced.
+          We never see your plaintext — only encrypted bytes. Your PIN or passphrase
+          never leaves your device. Prefer full privacy? Scan on-device and your
+          images never leave this device either.
+        </p>
         <p>
           <Badge>Built with Saisei</Badge>
         </p>
         <p style={{ marginTop: 8, color: '#252540' }}>
-          © 2026 VaultID · Your data never leaves your device without your permission.
+          © 2026 VaultID · Your data stays yours.
         </p>
+        {onPrivacy && (
+          <p style={{ marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={onPrivacy}
+              style={{ background: 'none', border: 'none', color: '#7B6FE8', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+            >
+              Privacy Policy
+            </button>
+          </p>
+        )}
       </footer>
     </div>
   );

@@ -111,7 +111,7 @@ export const FEATS = [
   },
   {
     iconName: 'Lock',     title: 'Zero-Knowledge Arch',
-    desc: 'Your decryption key is derived locally and lives only in session memory. Servers see nothing.',
+    desc: 'Your documents are encrypted on your device before they are stored or synced. We never see your plaintext — only encrypted bytes.',
     col: '#34D399', cols: ['#34D399', '#60EEB8', '#A0FFD8'], glow: '160 70 75',
   },
 ];
