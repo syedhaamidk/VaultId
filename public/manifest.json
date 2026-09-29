@@ -1,0 +1,17 @@
+{
+  "name": "VaultID — Encrypted Document Vault",
+  "short_name": "VaultID",
+  "description": "Military-grade encrypted document vault. Store IDs, medical records and important documents securely.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0A14",
+  "theme_color": "#7B6FE8",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
