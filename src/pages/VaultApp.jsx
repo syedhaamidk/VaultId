@@ -1143,6 +1143,11 @@ export default function VaultApp({ onBack }) {
                 Demo PIN: <code style={{ color: 'var(--act)', fontFamily: "'JetBrains Mono', monospace" }}>{DEMO_PIN}</code>
               </p>
             )}
+            {vaultVersion === 'v1' && (
+              <p style={{ color: 'var(--am)', fontSize: 11, marginTop: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                <AlertTriangle size={12} />PIN security is limited — upgrade to a passphrase for stronger protection.
+              </p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
               <span className="sbadge"><Shield size={10} />AES-256-GCM · Groq AI</span>
             </div>
@@ -1794,11 +1799,16 @@ export default function VaultApp({ onBack }) {
         <div className="mbg" onClick={() => setShowUpgradePrompt(false)}>
           <div className="mbox si" role="dialog" aria-modal="true" aria-label="Upgrade security" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Upgrade Security</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--ams)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--am)' }}>
+                  <AlertTriangle size={18} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>Upgrade Security</h3>
+              </div>
               <button className="abic" aria-label="Close" onClick={() => setShowUpgradePrompt(false)}><span aria-hidden="true">×</span></button>
             </div>
             <p style={{ fontSize: 14, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 16 }}>
-              Your vault is secured with a 6-digit PIN. Upgrade to a passphrase for stronger security — a long, unique passphrase is far harder to brute-force than a PIN.
+              Your vault is secured with a <strong>6-digit PIN</strong> — only 1 million possible combinations. A long, unique passphrase is exponentially harder to crack.
             </p>
             <p style={{ fontSize: 13, color: 'var(--tx3)', lineHeight: 1.5, marginBottom: 20 }}>
               Your documents and images will be re-encrypted with the new format. The old PIN vault is backed up until your next unlock.
