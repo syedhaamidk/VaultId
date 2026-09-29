@@ -1,0 +1,74 @@
+{
+  "name": "@chomuiro/saisei",
+  "version": "4.6.1",
+  "description": "Blueprint drafting-style reusable frontend kit (tokens + components + motion + React library). No build step, no framework lock-in.",
+  "license": "MIT",
+  "keywords": [
+    "css",
+    "design-system",
+    "components",
+    "react",
+    "vanilla-js"
+  ],
+  "files": [
+    "dist/",
+    "assets/",
+    "bin/",
+    "playground.html",
+    "tokens.css",
+    "tokens.json",
+    "themes.json",
+    "components.css",
+    "components.js",
+    "adapters/",
+    "react/",
+    "examples/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "main": "dist/blueprint.js",
+  "unpkg": "dist/blueprint.min.css",
+  "bin": {
+    "saisei": "bin/init.js"
+  },
+  "exports": {
+    ".": "./dist/blueprint.js",
+    "./css": "./dist/blueprint.css",
+    "./css-min": "./dist/blueprint.min.css",
+    "./js": "./dist/blueprint.js",
+    "./js-min": "./dist/blueprint.min.js",
+    "./dist/*": "./dist/*",
+    "./adapters/*": "./adapters/*",
+    "./react": {
+      "types": "./react/index.d.ts",
+      "default": "./react/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node build.js",
+    "prepublishOnly": "npm run build",
+    "test": "node tests/a11y-check.js && node tests/aria-audit.js",
+    "test:a11y": "node tests/a11y-check.js",
+    "test:react": "node tests/react-check.js",
+    "test:rtl": "vitest run",
+    "test:types": "tsc --noEmit -p tsconfig.check.json",
+    "test:e2e": "playwright test",
+    "test:all": "npm run build && npm test && npm run test:react && npm run test:rtl && npm run test:types && node tests/kit-check.js && node tests/ssr-check.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/react": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "svelte": "^5.57.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

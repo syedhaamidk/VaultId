@@ -1,0 +1,99 @@
+/* ============================================================
+   TOKENS — Blueprint system, monochrome.
+   No hue anywhere. Status/semantics (note vs warning vs danger)
+   are carried the way real technical drawings carry them: by
+   LINE TYPE, not color — solid = neutral, dashed = warning,
+   double = danger. See badge/alert rules in components.css.
+   Toggle light ↔ dark with data-theme="dark" on <html>.
+   ============================================================ */
+
+:root {
+  /* ---- Light (default) ---- */
+  --paper: #FFFFFF;
+  --paper-alt: #F3F3F3;
+  --ink: #0A0A0A;
+  --ink-soft: #5F5F5F; /* darkest gray still passing 4.5:1 on both --paper and --paper-alt */
+  --line: #D9D9D9;
+  --line-strong: #A3A3A3;
+
+  --accent: #0A0A0A;          /* primary action fill */
+  --accent-hover: #2E2E2E;
+  --accent-ink: #FFFFFF;      /* text sitting ON accent fill */
+  --accent-tint: rgba(10, 10, 10, 0.05);
+
+  /* Warning/danger read through weight + line-style, not hue */
+  --accent-mid: #595959;             /* warning ink */
+  --accent-mid-tint: rgba(10, 10, 10, 0.04);
+  --accent-deep: #0A0A0A;            /* danger ink — same as --ink, carried by double border weight */
+  --accent-deep-tint: rgba(10, 10, 10, 0.06);
+
+  /* ---- Type ---- */
+  --font-display: "Libre Caslon Display", Georgia, serif;
+  --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.85rem;
+  --text-3xl: 2.75rem;
+
+  --leading-tight: 1.15;
+  --leading-normal: 1.55;
+
+  /* ---- Space ---- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+
+  /* ---- Radius: near-zero everywhere — sharp corners, deliberate. ---- */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+
+  /* ---- Elevation: flat. Depth comes from line weight, not shadow. ---- */
+  --shadow-sm: none;
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.2);
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 160ms;  /* hover/press feedback */
+  --duration-base: 240ms;  /* panel/tab content changes */
+  --duration-slow: 320ms;  /* modal, theme cross-fade, page-level entrance */
+  --duration: var(--duration-fast); /* back-compat alias — prefer the named tiers above */
+
+  --max-width: 1080px;
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+
+  /* ---- Registration-mark size (corner ticks on major surfaces) ---- */
+  --tick: 14px;
+
+  /* ---- Graph-paper grid, very low opacity ---- */
+  --grid: rgba(0, 0, 0, 0.035);
+}
+
+/* Dark — same monochrome system, inverted. Toggle with data-theme="dark" on <html>. */
+[data-theme="dark"] {
+  --paper: #0A0A0A;
+  --paper-alt: #161616;
+  --ink: #FAFAFA;
+  --ink-soft: #9A9A9A;
+  --line: #2B2B2B;
+  --line-strong: #4D4D4D;
+
+  --accent: #FFFFFF;
+  --accent-hover: #D4D4D4;
+  --accent-ink: #0A0A0A;
+  --accent-tint: rgba(255, 255, 255, 0.08);
+
+  --accent-mid: #B0B0B0;
+  --accent-mid-tint: rgba(255, 255, 255, 0.05);
+  --accent-deep: #FFFFFF;
+  --accent-deep-tint: rgba(255, 255, 255, 0.1);
+
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.65);
+  --grid: rgba(255, 255, 255, 0.05);
+}

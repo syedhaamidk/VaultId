@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@chomuiro/saisei": "file:../stock",
+    "@chomuiro/saisei": "file:vendor/saisei",
     "@supabase/supabase-js": "^2.45.4",
     "gsap": "^3.12.5",
     "jspdf": "^4.2.1",

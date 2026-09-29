@@ -1,0 +1,8 @@
+{
+  "name": "@chomuiro/saisei",
+  "version": "4.6.1",
+  "kit": [
+    "dist/blueprint.css",
+    "dist/blueprint.js"
+  ]
+}

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" font-family="Georgia, 'Times New Roman', serif">
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="360" fill="#0A0A0A"/>
+  <rect width="1200" height="360" fill="url(#grid)"/>
+  <!-- registration corners -->
+  <g stroke="#FAFAFA" stroke-width="2">
+    <path d="M 22 46 L 22 22 L 46 22" fill="none"/>
+    <path d="M 1178 46 L 1178 22 L 1154 22" fill="none"/>
+    <path d="M 22 314 L 22 338 L 46 338" fill="none"/>
+    <path d="M 1178 314 L 1178 338 L 1154 338" fill="none"/>
+  </g>
+  <text x="64" y="96" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="15" letter-spacing="3" fill="#9A9A9A">KIT / GENERAL ARRANGEMENT</text>
+  <text x="60" y="196" font-size="104" font-weight="600" letter-spacing="-2" fill="#FAFAFA">Saisei</text>
+  <text x="64" y="240" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="17" fill="#9A9A9A">A frontend you keep, not one you rebuild.</text>
+  <!-- title-block cells -->
+  <g font-family="'IBM Plex Mono', ui-monospace, monospace">
+    <line x1="880" y1="120" x2="880" y2="260" stroke="#4D4D4D" stroke-width="1"/>
+    <line x1="990" y1="120" x2="990" y2="260" stroke="#4D4D4D" stroke-width="1"/>
+    <text x="896" y="150" font-size="12" letter-spacing="2" fill="#9A9A9A">SCALE</text>
+    <text x="896" y="176" font-size="20" fill="#FAFAFA">1:1</text>
+    <text x="896" y="212" font-size="12" letter-spacing="2" fill="#9A9A9A">REV</text>
+    <text x="896" y="238" font-size="20" fill="#FAFAFA">4.6</text>
+    <text x="1006" y="150" font-size="12" letter-spacing="2" fill="#9A9A9A">SHEET</text>
+    <text x="1006" y="176" font-size="20" fill="#FAFAFA">01 / 01</text>
+    <text x="1006" y="212" font-size="12" letter-spacing="2" fill="#9A9A9A">LICENSE</text>
+    <text x="1006" y="238" font-size="20" fill="#FAFAFA">MIT</text>
+  </g>
+  <!-- dimension line -->
+  <g stroke="#4D4D4D" stroke-width="1">
+    <line x1="64" y1="300" x2="1136" y2="300"/>
+    <line x1="64" y1="294" x2="64" y2="306"/>
+    <line x1="1136" y1="294" x2="1136" y2="306"/>
+  </g>
+  <text x="600" y="294" text-anchor="middle" font-family="'IBM Plex Mono', ui-monospace, monospace" font-size="13" letter-spacing="2" fill="#9A9A9A">TOKENS · COMPONENTS · REACT · NO BUILD STEP</text>
+</svg>

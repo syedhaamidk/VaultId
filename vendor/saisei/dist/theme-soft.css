@@ -1,0 +1,38 @@
+/*! @chomuiro/saisei v4.6.1 — Blueprint kit. MIT. See README "Reuse in any website". */
+/* Preset: Soft. Include after blueprint.css. */
+:root {
+  --paper: #FAFAFA;
+  --paper-alt: #F1F1F1;
+  --ink: #2B2B2B;
+  --ink-soft: #616161;
+  --line: #DCDCDC;
+  --line-strong: #A8A8A8;
+  --accent: #2B2B2B;
+  --accent-hover: #4A4A4A;
+  --accent-ink: #FAFAFA;
+  --accent-tint: rgba(43, 43, 43, 0.05);
+  --grid: rgba(43, 43, 43, 0.035);
+  --radius-sm: 10px;
+  --radius-md: 10px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+[data-theme="dark"] {
+  --paper: #101010;
+  --paper-alt: #1B1B1B;
+  --ink: #F2F2F2;
+  --ink-soft: #A8A8A8;
+  --line: #333333;
+  --line-strong: #555555;
+  --accent: #F2F2F2;
+  --accent-hover: #CFCFCF;
+  --accent-ink: #101010;
+  --accent-tint: rgba(242, 242, 242, 0.08);
+  --grid: rgba(242, 242, 242, 0.05);
+  --radius-sm: 10px;
+  --radius-md: 10px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+}

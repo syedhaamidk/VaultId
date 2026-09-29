@@ -1,0 +1,28 @@
+/*! @chomuiro/saisei v4.6.1 — Blueprint kit. MIT. See README "Reuse in any website". */
+/* Preset: Moss. Include after blueprint.css. */
+:root {
+  --paper: #F7F8F4;
+  --paper-alt: #ECEFE6;
+  --ink: #161A15;
+  --ink-soft: #5A6156;
+  --line: #D5DACA;
+  --line-strong: #9AA392;
+  --accent: #161A15;
+  --accent-hover: #3A4238;
+  --accent-ink: #F7F8F4;
+  --accent-tint: rgba(22, 26, 21, 0.06);
+  --grid: rgba(22, 26, 21, 0.045);
+}
+[data-theme="dark"] {
+  --paper: #121511;
+  --paper-alt: #1C2018;
+  --ink: #EFF2E8;
+  --ink-soft: #AEB5A2;
+  --line: #33392E;
+  --line-strong: #59614F;
+  --accent: #EFF2E8;
+  --accent-hover: #D3D8C6;
+  --accent-ink: #121511;
+  --accent-tint: rgba(239, 242, 232, 0.08);
+  --grid: rgba(239, 242, 232, 0.05);
+}

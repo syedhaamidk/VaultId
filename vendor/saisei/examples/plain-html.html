@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My site — Blueprint kit</title>
+<!-- Option A: files copied from the kit (or dist/ output of npm run build) -->
+<link rel="stylesheet" href="blueprint.css">
+</head>
+<body>
+  <main class="container" style="padding-bottom: var(--space-8);">
+    <div class="titleblock reg-corners">
+      <div class="titleblock-main">
+        <span class="sheet-label">My site / General Arrangement</span>
+        <h1 class="h1">Hello, Blueprint.</h1>
+        <p class="text-soft">Copy any block from the kit's index.html — classes just work.</p>
+        <button class="btn btn-primary" data-modal-open="hello-modal">Open modal</button>
+      </div>
+      <div class="titleblock-cell"><span class="tb-label">Rev</span><span class="tb-value">1.0</span></div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="hello-modal" data-modal role="presentation" aria-hidden="true" inert>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="hm-t">
+      <div class="modal-header">
+        <h3 class="h3" id="hm-t" style="margin:0;">It works</h3>
+        <button class="modal-close" data-modal-close aria-label="Close dialog">[ X ]</button>
+      </div>
+      <p class="text-soft text-sm">Modal, focus trap, and scroll lock come free with blueprint.js.</p>
+      <div class="modal-footer"><button class="btn btn-secondary" data-modal-close>Close</button></div>
+    </div>
+  </div>
+
+  <script src="blueprint.js"></script>
+</body>
+</html>

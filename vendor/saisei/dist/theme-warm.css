@@ -1,0 +1,28 @@
+/*! @chomuiro/saisei v4.6.1 — Blueprint kit. MIT. See README "Reuse in any website". */
+/* Preset: Warm paper. Include after blueprint.css. */
+:root {
+  --paper: #FAF7F1;
+  --paper-alt: #F0EAE0;
+  --ink: #1C1712;
+  --ink-soft: #625B52;
+  --line: #D8CFBF;
+  --line-strong: #A2967F;
+  --accent: #1C1712;
+  --accent-hover: #3E362D;
+  --accent-ink: #FAF7F1;
+  --accent-tint: rgba(28, 23, 18, 0.06);
+  --grid: rgba(28, 23, 18, 0.045);
+}
+[data-theme="dark"] {
+  --paper: #161210;
+  --paper-alt: #201B17;
+  --ink: #F5EFE6;
+  --ink-soft: #B3A898;
+  --line: #38302A;
+  --line-strong: #5C5248;
+  --accent: #F5EFE6;
+  --accent-hover: #D8CFC2;
+  --accent-ink: #161210;
+  --accent-tint: rgba(245, 239, 230, 0.08);
+  --grid: rgba(245, 239, 230, 0.05);
+}

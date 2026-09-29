@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#0A0A0A"/>
+  <!-- registration corners -->
+  <g stroke="#FAFAFA" stroke-width="2.5" fill="none">
+    <path d="M 8 20 L 8 8 L 20 8"/>
+    <path d="M 56 44 L 56 56 L 44 56"/>
+  </g>
+  <text x="32" y="43" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="600" fill="#FAFAFA">S</text>
+</svg>

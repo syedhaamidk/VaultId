@@ -1,0 +1,28 @@
+/*! @chomuiro/saisei v4.6.1 — Blueprint kit. MIT. See README "Reuse in any website". */
+/* Preset: Slate. Include after blueprint.css. */
+:root {
+  --paper: #F7F8FA;
+  --paper-alt: #EBEEF2;
+  --ink: #17191D;
+  --ink-soft: #5B6068;
+  --line: #D5D9E0;
+  --line-strong: #9AA0AB;
+  --accent: #17191D;
+  --accent-hover: #3B4048;
+  --accent-ink: #F7F8FA;
+  --accent-tint: rgba(23, 25, 29, 0.06);
+  --grid: rgba(23, 25, 29, 0.045);
+}
+[data-theme="dark"] {
+  --paper: #111418;
+  --paper-alt: #1A1E24;
+  --ink: #EFF1F5;
+  --ink-soft: #ABB2BC;
+  --line: #31363E;
+  --line-strong: #596069;
+  --accent: #EFF1F5;
+  --accent-hover: #D2D7DE;
+  --accent-ink: #111418;
+  --accent-tint: rgba(239, 241, 245, 0.08);
+  --grid: rgba(239, 241, 245, 0.05);
+}

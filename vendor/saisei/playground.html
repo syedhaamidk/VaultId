@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="apple-touch-icon" href="assets/favicon-180.png">
+<title>Saisei — Token Playground</title>
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem("bpk-theme");
+      var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark)) document.documentElement.dataset.theme = "dark";
+    } catch (e) { /* default light is fine */ }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  .pg-grid { display: grid; grid-template-columns: 300px 1fr; gap: var(--space-5); align-items: start; }
+  @media (max-width: 860px) { .pg-grid { grid-template-columns: 1fr; } }
+  .pg-controls { position: sticky; top: var(--space-4); }
+  .swatch { display: flex; align-items: center; gap: var(--space-2); }
+  .swatch input[type="color"] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--line-strong); background: var(--paper-alt); cursor: pointer; }
+  .swatch code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-soft); }
+  #pg-output { width: 100%; min-height: 140px; font-family: var(--font-mono); font-size: var(--text-xs); }
+</style>
+</head>
+<body>
+
+<div class="scroll-rule" aria-hidden="true"></div>
+
+<a href="#pg-preview" class="skip-link">Skip to preview</a>
+
+<div class="container" style="padding-bottom: var(--space-8);">
+
+  <div class="utility-bar reveal">
+    <nav aria-label="Section navigation">
+      <ul class="utility-links">
+        <li><a href="index.html">← Kit</a></li>
+        <li><a href="docs.html">↗ Docs</a></li>
+        <li><a href="#pg-controls">Tokens</a></li>
+        <li><a href="#pg-preview">Preview</a></li>
+        <li><a href="#pg-export">Export</a></li>
+      </ul>
+    </nav>
+    <button class="btn btn-secondary btn-sm mono" id="theme-toggle">⇄ Dark</button>
+  </div>
+
+  <main id="main-content">
+  <div class="titleblock reg-corners draw-in reveal">
+    <div class="titleblock-main">
+      <span class="sheet-label">Kit / Token Playground</span>
+      <h1 class="h1" style="max-width: 16ch;">Re-skin without touching components.</h1>
+      <p class="text-soft" style="max-width: 52ch;">Tweak the tokens, watch every component follow, then copy the override block into your own <span class="mono">tokens.css</span>.</p>
+    </div>
+    <div class="titleblock-cell">
+      <span class="tb-label">Changed</span>
+      <span class="tb-value" id="pg-count">0</span>
+    </div>
+  </div>
+
+  <div class="pg-grid">
+    <form class="stack pg-controls" id="pg-controls" aria-labelledby="pg-controls-h">
+      <h2 class="h3" id="pg-controls-h">Tokens</h2>
+      <div class="field"><span class="label" id="pg-colors-h">Surfaces &amp; ink</span>
+        <div class="stack" role="group" aria-labelledby="pg-colors-h" id="pg-colors"></div>
+      </div>
+      <div class="field">
+        <label class="label" for="pg-radius">Corner radius (<span id="pg-radius-val">2</span>px, all tiers)</label>
+        <input type="range" id="pg-radius" min="0" max="12" step="1" value="2">
+      </div>
+      <div class="field">
+        <label class="label" for="pg-font-ui">UI font stack</label>
+        <input class="input mono" id="pg-font-ui" data-font="--font-ui" value='"IBM Plex Sans", -apple-system, "Segoe UI", sans-serif'>
+      </div>
+      <div class="field">
+        <label class="label" for="pg-font-display">Display font stack</label>
+        <input class="input mono" id="pg-font-display" data-font="--font-display" value='"Libre Caslon Display", Georgia, serif'>
+      </div>
+      <div class="row">
+        <button class="btn btn-secondary btn-sm" type="button" id="pg-reset">Reset</button>
+        <button class="btn btn-primary btn-sm" type="button" id="pg-copy">Copy CSS</button>
+      </div>
+      <div class="field">
+        <span class="label" id="pg-presets-h">Presets (same values as <span class="mono">themes.json</span>)</span>
+        <div class="row" role="group" aria-labelledby="pg-presets-h" style="flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="default">Blueprint</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="warm">Warm</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="contrast">Contrast</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="soft">Soft</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="moss">Moss</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="slate">Slate</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-preset="blueprint">Blueprint</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="stack" id="pg-preview" aria-labelledby="pg-preview-h">
+      <h2 class="h3" id="pg-preview-h">Preview</h2>
+      <div class="row" style="flex-wrap: wrap;">
+        <button class="btn btn-primary">Primary action</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <span class="badge badge-accent">Active</span>
+        <span class="badge badge-warning">Pending</span>
+        <span class="badge badge-danger">Suspended</span>
+      </div>
+      <div class="card reg-corners">
+        <span class="card-tag">// LIVE PREVIEW</span>
+        <h3 class="card-title">Every edit lands here instantly</h3>
+        <p class="text-soft text-sm">Colors, corners, and type all read from the same tokens your site will ship.</p>
+      </div>
+      <div class="alert alert-warning"><span class="alert-tag">FLAG</span><span>Warning reads through line style, not hue.</span></div>
+      <div class="field">
+        <label class="label" for="pg-demo-input">Sample input</label>
+        <input class="input" id="pg-demo-input" placeholder="Ada Lovelace">
+      </div>
+    </div>
+  </div>
+
+  <div class="dim-divider"><div class="dim-divider-line"></div><span class="dim-divider-label">Export</span><div class="dim-divider-line"></div></div>
+
+  <section id="pg-export" aria-labelledby="pg-export-h">
+    <span class="sheet-label">Sheet PG — Export</span>
+    <h2 class="h2" id="pg-export-h">Override block</h2>
+    <p class="text-soft text-sm">Only changed tokens are listed. Paste after the kit's <span class="mono">:root</span> (and inside <span class="mono">[data-theme="dark"]</span> for dark tweaks — this page exports the active theme).</p>
+    <div class="field">
+      <label class="label" for="pg-output">Generated CSS</label>
+      <textarea class="textarea mono" id="pg-output" readonly>// Tweak a token to generate overrides…</textarea>
+    </div>
+  </section>
+  </main>
+
+</div>
+
+<script src="components.js"></script>
+<script>
+(function () {
+  "use strict";
+  var COLORS = ["--paper", "--paper-alt", "--ink", "--ink-soft", "--line", "--line-strong", "--accent", "--accent-hover", "--accent-ink"];
+  var root = document.documentElement;
+  var cs = getComputedStyle(root);
+  var defaults = {};
+  var dark = function () { return root.dataset.theme === "dark"; };
+
+  function get(v) { return getComputedStyle(root).getPropertyValue(v).trim(); }
+  COLORS.forEach(function (v) { defaults[v] = cs.getPropertyValue(v).trim(); });
+  defaults["--radius-sm"] = cs.getPropertyValue("--radius-sm").trim();
+  defaults["--font-ui"] = cs.getPropertyValue("--font-ui").trim();
+  defaults["--font-display"] = cs.getPropertyValue("--font-display").trim();
+
+  var box = document.getElementById("pg-colors");
+  COLORS.forEach(function (v) {
+    var row = document.createElement("div");
+    row.className = "swatch";
+    var input = document.createElement("input");
+    input.type = "color"; input.value = rgbToHex(get(v)) || "#000000";
+    input.setAttribute("aria-label", v);
+    input.dataset.var = v;
+    input.addEventListener("input", function () {
+      root.style.setProperty(v, input.value);
+      refresh();
+    });
+    var code = document.createElement("code"); code.textContent = v;
+    row.append(input, code);
+    box.appendChild(row);
+  });
+
+  function rgbToHex(s) {
+    var m = s.match(/rgba?\(([^)]+)\)/);
+    if (!m) return /^#[0-9a-f]{3,8}$/i.test(s) ? s : null;
+    var p = m[1].split(",").slice(0, 3).map(function (x) { return Math.max(0, Math.min(255, parseInt(x, 10) || 0)); });
+    return "#" + p.map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  var radius = document.getElementById("pg-radius");
+  radius.addEventListener("input", function () {
+    ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"].forEach(function (v) {
+      root.style.setProperty(v, radius.value + "px");
+    });
+    document.getElementById("pg-radius-val").textContent = radius.value;
+    refresh();
+  });
+
+  document.querySelectorAll("[data-font]").forEach(function (input) {
+    input.addEventListener("input", function () {
+      root.style.setProperty(input.dataset.font, input.value);
+      refresh();
+    });
+  });
+
+  function current() {
+    var out = {};
+    COLORS.forEach(function (v) { out[v] = get(v); });
+    ["--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"].forEach(function (v) { out[v] = get(v); });
+    out["--font-ui"] = get("--font-ui");
+    out["--font-display"] = get("--font-display");
+    return out;
+  }
+
+  function refresh() {
+    var cur = current(), changed = {};
+    Object.keys(cur).forEach(function (k) {
+      if (cur[k] !== defaults[k]) changed[k] = cur[k];
+    });
+    var n = Object.keys(changed).length;
+    document.getElementById("pg-count").textContent = String(n);
+    var sel = dark() ? '[data-theme="dark"]' : ":root";
+    var css = n ? sel + " {\n" + Object.keys(changed).map(function (k) { return "  " + k + ": " + changed[k] + ";"; }).join("\n") + "\n}" : "// Tweak a token to generate overrides…";
+    document.getElementById("pg-output").value = css;
+    return css;
+  }
+
+  document.getElementById("pg-reset").addEventListener("click", function () {
+    Object.keys(defaults).forEach(function (k) { root.style.removeProperty(k); });
+    ["--radius-md", "--radius-lg", "--radius-xl"].forEach(function (k) { root.style.removeProperty(k); });
+    box.querySelectorAll('input[type="color"]').forEach(function (input) {
+      input.value = rgbToHex(defaults[input.dataset.var]) || "#000000";
+    });
+    radius.value = parseInt(defaults["--radius-sm"], 10) || 0;
+    document.getElementById("pg-radius-val").textContent = radius.value;
+    refresh();
+    window.toast && window.toast("// Tokens reset");
+  });
+
+  // Presets mirror themes.json (source of truth for dist/theme-*.css).
+  var PRESETS = {
+    warm: {
+      light: { "--paper": "#FAF7F1", "--paper-alt": "#F0EAE0", "--ink": "#1C1712", "--ink-soft": "#625B52", "--line": "#D8CFBF", "--line-strong": "#A2967F", "--accent": "#1C1712", "--accent-hover": "#3E362D", "--accent-ink": "#FAF7F1" },
+      dark: { "--paper": "#161210", "--paper-alt": "#201B17", "--ink": "#F5EFE6", "--ink-soft": "#B3A898", "--line": "#38302A", "--line-strong": "#5C5248", "--accent": "#F5EFE6", "--accent-hover": "#D8CFC2", "--accent-ink": "#161210" }
+    },
+    contrast: {
+      light: { "--paper": "#FFFFFF", "--paper-alt": "#F2F2F2", "--ink": "#000000", "--ink-soft": "#595959", "--line": "#767676", "--line-strong": "#1A1A1A", "--accent": "#000000", "--accent-hover": "#333333", "--accent-ink": "#FFFFFF" },
+      dark: { "--paper": "#000000", "--paper-alt": "#111111", "--ink": "#FFFFFF", "--ink-soft": "#D6D6D6", "--line": "#8A8A8A", "--line-strong": "#CFCFCF", "--accent": "#FFFFFF", "--accent-hover": "#D9D9D9", "--accent-ink": "#000000" }
+    },
+    soft: {
+      light: { "--paper": "#FAFAFA", "--paper-alt": "#F1F1F1", "--ink": "#2B2B2B", "--ink-soft": "#616161", "--line": "#DCDCDC", "--line-strong": "#A8A8A8", "--accent": "#2B2B2B", "--accent-hover": "#4A4A4A", "--accent-ink": "#FAFAFA", "--radius-sm": "10px", "--radius-md": "10px", "--radius-lg": "10px", "--radius-xl": "10px" },
+      dark: { "--paper": "#101010", "--paper-alt": "#1B1B1B", "--ink": "#F2F2F2", "--ink-soft": "#A8A8A8", "--line": "#333333", "--line-strong": "#555555", "--accent": "#F2F2F2", "--accent-hover": "#CFCFCF", "--accent-ink": "#101010", "--radius-sm": "10px", "--radius-md": "10px", "--radius-lg": "10px", "--radius-xl": "10px" }
+    },
+    moss: {
+      light: { "--paper": "#F7F8F4", "--paper-alt": "#ECEFE6", "--ink": "#161A15", "--ink-soft": "#5A6156", "--line": "#D5DACA", "--line-strong": "#9AA392", "--accent": "#161A15", "--accent-hover": "#3A4238", "--accent-ink": "#F7F8F4" },
+      dark: { "--paper": "#121511", "--paper-alt": "#1C2018", "--ink": "#EFF2E8", "--ink-soft": "#AEB5A2", "--line": "#33392E", "--line-strong": "#59614F", "--accent": "#EFF2E8", "--accent-hover": "#D3D8C6", "--accent-ink": "#121511" }
+    },
+    slate: {
+      light: { "--paper": "#F7F8FA", "--paper-alt": "#EBEEF2", "--ink": "#17191D", "--ink-soft": "#5B6068", "--line": "#D5D9E0", "--line-strong": "#9AA0AB", "--accent": "#17191D", "--accent-hover": "#3B4048", "--accent-ink": "#F7F8FA" },
+      dark: { "--paper": "#111418", "--paper-alt": "#1A1E24", "--ink": "#EFF1F5", "--ink-soft": "#ABB2BC", "--line": "#31363E", "--line-strong": "#596069", "--accent": "#EFF1F5", "--accent-hover": "#D2D7DE", "--accent-ink": "#111418" }
+    },
+    blueprint: {
+      light: { "--paper": "#143D66", "--paper-alt": "#0E2C4E", "--ink": "#FFFFFF", "--ink-soft": "#C3D2E2", "--line": "#2E5A8C", "--line-strong": "#7FA3CC", "--accent": "#FFFFFF", "--accent-hover": "#D6E2F0", "--accent-ink": "#143D66" },
+      dark: { "--paper": "#0A1F36", "--paper-alt": "#0D2742", "--ink": "#FFFFFF", "--ink-soft": "#B9C9DC", "--line": "#274A73", "--line-strong": "#6E92BE", "--accent": "#FFFFFF", "--accent-hover": "#CFDCEA", "--accent-ink": "#0A1F36" }
+    }
+  };
+
+  function syncInputs() {
+    box.querySelectorAll('input[type="color"]').forEach(function (input) {
+      var v = get(input.dataset.var);
+      var hex = rgbToHex(v);
+      if (hex) input.value = hex;
+    });
+    var r = parseInt(get("--radius-sm"), 10);
+    if (!isNaN(r)) { radius.value = r; document.getElementById("pg-radius-val").textContent = r; }
+  }
+
+  document.querySelectorAll("[data-preset]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var name = btn.dataset.preset;
+      if (name === "default") {
+        Object.keys(defaults).forEach(function (k) { root.style.removeProperty(k); });
+        ["--radius-md", "--radius-lg", "--radius-xl"].forEach(function (k) { root.style.removeProperty(k); });
+      } else {
+        var map = PRESETS[name][dark() ? "dark" : "light"];
+        Object.keys(map).forEach(function (k) { root.style.setProperty(k, map[k]); });
+      }
+      syncInputs();
+      refresh();
+      window.toast && window.toast("// Preset: " + btn.textContent.trim());
+    });
+  });
+
+  document.getElementById("pg-copy").addEventListener("click", function () {    var css = refresh();
+    function done() { window.toast && window.toast("// CSS copied"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(css).then(done, done);
+    else {
+      var ta = document.getElementById("pg-output");
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+      done();
+    }
+  });
+
+  // Keep swatches in sync when the theme flips (defaults stay light-mode based).
+  document.getElementById("theme-toggle").addEventListener("click", function () {
+    setTimeout(refresh, 350);
+  });
+
+  refresh();
+})();
+</script>
+</body>
+</html>

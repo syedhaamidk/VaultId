@@ -5,5 +5,5 @@ export default defineConfig({
   plugins: [react()],
   server: { port: 5173 },
   build:  { outDir: 'dist' },
-  test:   { environment: 'node' },
+  test:   { environment: 'node', include: ['src/**/*.{test,spec}.{js,jsx}'] },
 });

@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 dist-ssr/
+# Exception: the vendored @chomuiro/saisei package ships its built dist/ —
+# it must be committed or the package is unusable.
+!vendor/saisei/dist/
 
 # Environment variables — NEVER commit these
 .env
