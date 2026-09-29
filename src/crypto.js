@@ -13,7 +13,10 @@
 export function buf2b64(buf) {
   const bytes = new Uint8Array(buf);
   let s = '';
-  for (let i = 0; i < bytes.byteLength; i++) s += String.fromCharCode(bytes[i]);
+  const CHUNK = 0x8000; // 32KB chunks to avoid stack overflow
+  for (let i = 0; i < bytes.byteLength; i += CHUNK) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
   return btoa(s);
 }
 export const b642buf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));

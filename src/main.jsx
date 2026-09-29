@@ -22,3 +22,19 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+// PWA install prompt — capture the beforeinstallprompt event.
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+// Expose a function to trigger the install prompt (called from the UI).
+window.promptInstall = async () => {
+  if (!deferredPrompt) return false;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  return outcome === 'accepted';
+};

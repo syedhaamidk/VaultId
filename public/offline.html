@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VaultID — Offline</title>
+    <style>
+      body { font-family: sans-serif; background: #07070F; color: #EEEEFF; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+      .msg { max-width: 400px; padding: 20px; }
+      h1 { font-size: 24px; margin-bottom: 12px; }
+      p { color: #AAAACC; line-height: 1.6; }
+      button { margin-top: 20px; padding: 10px 20px; border: 1px solid #7B6FE8; background: transparent; color: #EEEEFF; border-radius: 8px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="msg">
+      <h1>VaultID</h1>
+      <p>You're offline. Your encrypted vault is stored on this device — you can still access it once you're back online.</p>
+      <button onclick="window.location.reload()">Try Again</button>
+    </div>
+  </body>
+</html>

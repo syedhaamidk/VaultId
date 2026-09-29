@@ -6,7 +6,7 @@ import {
   CreditCard, Activity, Wallet, Home, Scale,
   Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe, LogOut,
 } from 'lucide-react';
-import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon } from '../utils.jsx';
+import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon, compressImage } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
 import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote } from '../crypto.js';
 import { syncVault } from '../sync.js';
@@ -989,7 +989,9 @@ export default function VaultApp({ onBack }) {
             return { ...doc, ...cleanDoc, versions };
           })
         : [...docs, { ...cleanDoc, id, versions: [] }];
-      const newImgs = filePrev ? { ...imgs, [id]: filePrev } : imgs;
+      // Compress the image before storing (saves localStorage quota).
+      const compressedImg = file ? await compressImage(file) : null;
+      const newImgs = compressedImg ? { ...imgs, [id]: compressedImg } : imgs;
       const result = await persist(newDocs, newImgs);
 
       if (!result.ok) {
@@ -1199,7 +1201,7 @@ export default function VaultApp({ onBack }) {
               />
             </div>
             {unlockErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>{unlockErr}</p>}
-            {unlockOk && <p style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
+            {unlockOk && <p role="status" aria-live="polite" style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
               <span className="sbadge"><Shield size={10} />AES-256-GCM · Passphrase</span>
             </div>
@@ -1209,7 +1211,13 @@ export default function VaultApp({ onBack }) {
         {/* v1: PIN keypad (existing) */}
         {phase !== 'boot' && vaultVersion === 'v1' && (
           <>
-            <div className={pinErr ? 'shk' : ''} style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}>
+            <div
+              className={pinErr ? 'shk' : ''}
+              style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 28 }}
+              role="status"
+              aria-label={`${pin.length} of ${PIN_LEN} digits entered`}
+              aria-live="polite"
+            >
               {Array.from({ length: PIN_LEN }).map((_, i) => (
                 <div key={i} style={{ width: 13, height: 13, borderRadius: 4, background: pin.length > i ? 'var(--ac1)' : 'var(--bd2)', transition: 'all .15s', boxShadow: pin.length > i ? '0 0 12px var(--ac1)' : undefined }} />
               ))}
@@ -1227,7 +1235,7 @@ export default function VaultApp({ onBack }) {
             {lockedOut && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Too many attempts — try again in {lockRemain}s</p>}
             {!lockedOut && pinErr   && <p style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>Incorrect PIN — try again</p>}
             {!lockedOut && unlockErr && <p role="alert" style={{ color: 'var(--re)', fontSize: 12, marginTop: 14, fontWeight: 500 }}>{unlockErr}</p>}
-            {unlockOk && <p style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
+            {unlockOk && <p role="status" aria-live="polite" style={{ color: 'var(--gr)', fontSize: 12, marginTop: 14, fontWeight: 600 }}>Unlocked ✓</p>}
 
             {DEMO_MODE && (
               <p style={{ color: 'var(--tx4)', fontSize: 11, marginTop: 20 }}>
@@ -1528,7 +1536,10 @@ export default function VaultApp({ onBack }) {
                         <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg2)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--bd)' }}>
                           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tx3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.num}</span>
                           <button className="abic" aria-label={`Copy ${doc.name} document number`} style={{ width: 26, height: 26, borderRadius: 6, marginLeft: 6, flexShrink: 0 }} onClick={(e) => copyNum(e, doc.id, doc.num)}>
-                            {cpId === doc.id ? <Check size={12} style={{ color: 'var(--gr)' }} /> : <Copy size={12} />}
+                            <span aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+        {cpId === doc.id ? 'Copied' : ''}
+      </span>
+      {cpId === doc.id ? <Check size={12} style={{ color: 'var(--gr)' }} /> : <Copy size={12} />}
                           </button>
                         </div>
                       </div>

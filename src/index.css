@@ -31,7 +31,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 .app[data-t="dark"] {
   --bg:   #07070F; --bg2:  #0E0E1C; --sur:  #131324; --sur2: #1A1A30;
   --bd:   #222240; --bd2:  #32325A;
-  --tx:   #EEEEFF; --tx2:  #AAAAC8; --tx3:  #7B7BA8; --tx4:  #545480;
+  --tx:   #EEEEFF; --tx2:  #B8B8D4; --tx3:  #9090B8; --tx4:  #6A6A96;
   --ac1:  #7B6FE8; --ac2:  #C060F0;
   --acs:  rgba(123,111,232,.14); --act: #B0A8FF;
   --re:   #F87171; --res:  rgba(248,113,113,.12); --ret: #FFB8B8;
@@ -91,6 +91,28 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
   }
   .spin, .pu, .fl { animation: none !important; }
 }
+
+/* ── Mobile / PWA ───────────────────────────────────────────────────────────── */
+/* Safe area insets for notched devices (iPhone X+, etc.) */
+.app { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+/* Minimum touch target size (44×44 per WCAG 2.5.5) */
+@media (pointer: coarse) {
+  .abic, .nk, .anv, .abtn, button { min-height: 44px; min-width: 44px; }
+  .kebab-item { min-height: 44px; }
+}
+
+/* Mobile bottom nav safe area */
+.mob-nav { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Prevent text selection on interactive elements */
+button, .anv, .abic, .nk { -webkit-user-select: none; user-select: none; }
+
+/* Prevent iOS tap highlight */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Smooth scrolling on iOS */
+.c-area, .asidebar { -webkit-overflow-scrolling: touch; }
 
 /* ── Gradient helpers ─────────────────────────────────────────────────────────── */
 .gtext {

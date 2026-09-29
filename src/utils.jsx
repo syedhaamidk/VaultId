@@ -7,6 +7,46 @@ import {
 import { VAULT_CAT } from './data.js';
 import { validateIndianDocument } from './utils/documentValidation.js';
 
+// ── Image compression ────────────────────────────────────────────────────────
+// Compresses an image file to a JPEG data URL at a target size, using a
+// canvas. Falls back to the original if compression fails.
+export async function compressImage(file, maxWidth = 1200, quality = 0.82) {
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+
+    const img = await new Promise((res, rej) => {
+      const image = new Image();
+      image.onload = () => res(image);
+      image.onerror = rej;
+      image.src = dataUrl;
+    });
+
+    const scale = Math.min(1, maxWidth / img.naturalWidth);
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+    return canvas.toDataURL('image/jpeg', quality);
+  } catch {
+    // Fallback: return the original file as a data URL.
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
 // ── Date helpers ─────────────────────────────────────────────────────────────
 // Date-only values are parsed as local calendar dates. Parsing them with
 // `new Date('YYYY-MM-DD')` treats them as UTC and can display the previous day

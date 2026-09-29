@@ -49,9 +49,18 @@ const CardNav = ({
     return 260;
   };
 
+  const reduceMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const createTimeline = () => {
     const navEl = navRef.current;
     if (!navEl) return null;
+    if (reduceMotion) {
+      // Skip animation — just show the content.
+      navEl.style.height = 'auto';
+      navEl.style.overflow = 'visible';
+      cardsRef.current.forEach((card) => { if (card) { card.style.transform = 'none'; card.style.opacity = '1'; } });
+      return null;
+    }
     gsap.set(navEl,            { height: 60, overflow: 'hidden' });
     gsap.set(cardsRef.current, { y: 50, opacity: 0 });
     const tl = gsap.timeline({ paused: true });
