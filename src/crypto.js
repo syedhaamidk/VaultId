@@ -174,6 +174,12 @@ function asV2Blob(raw) {
   return null;
 }
 
+// Returns true if the local vault is v2 (or if no vault exists yet —
+// new vaults will be v2). Used by the sync guard.
+export function isVaultV2() {
+  return asV2Blob(LS.get('vid_vault')) !== null;
+}
+
 // ── v2: create ───────────────────────────────────────────────────────────────
 export async function createVaultV2(passphrase, docs = [], imgs = {}, emergency = {}) {
   try {
@@ -458,6 +464,7 @@ export function resetVault() {
 
 /** Mark the local encrypted blob as successfully mirrored to the cloud. */
 export function markVaultSynced() {
+  if (isVaultV2()) return; // sync is paused for v2 — don't touch vid_dirty
   LS.set('vid_dirty', '0');
 }
 

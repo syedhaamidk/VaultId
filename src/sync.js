@@ -12,6 +12,7 @@
  * ciphertext — same guarantee as local-only mode, just synced.
  */
 import { supabase, supabaseEnabled } from './supabaseClient.js';
+import { isVaultV2 } from './crypto.js';
 
 export { supabaseEnabled };
 
@@ -38,7 +39,8 @@ export async function signOut() {
 /** Returns the current session's user, or null if signed out / not configured. */
 export async function getCurrentUser() {
   if (!supabaseEnabled) return null;
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
   return data.session?.user ?? null;
 }
 
@@ -54,6 +56,19 @@ export function onAuthChange(callback) {
   return () => data.subscription.unsubscribe();
 }
 
+// ── Sync status ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns the current sync status. For v2 vaults, sync is paused until
+ * the sync layer is updated to handle the v2 format (see 4d).
+ * @returns {{ status: 'active'|'paused_v2'|'not_configured', reason?: string }}
+ */
+export function getSyncStatus() {
+  if (!supabaseEnabled) return { status: 'not_configured' };
+  if (isVaultV2()) return { status: 'paused_v2', reason: 'Sync paused for upgraded vaults' };
+  return { status: 'active' };
+}
+
 // ── Encrypted vault sync ───────────────────────────────────────────────────────
 // Table: vaults (user_id uuid PK references auth.users, salt text, iv text,
 // ciphertext text, updated_at timestamptz). RLS restricts all access to
@@ -67,14 +82,18 @@ export function onAuthChange(callback) {
  * @param {string} saltB64
  * @param {{iv: string, ct: string}} encBlob
  */
-export async function pushVault(userId, saltB64, encBlob) {
+export async function pushVault(userId, saltB64, encBlob, updatedAt = new Date().toISOString()) {
   if (!supabaseEnabled) return { ok: false, reason: 'NOT_CONFIGURED' };
+  if (isVaultV2()) return { ok: false, reason: 'SYNC_PAUSED_V2' };
+  if (!userId || !saltB64 || !encBlob?.iv || !encBlob?.ct) {
+    return { ok: false, reason: 'INVALID_VAULT_BLOB' };
+  }
   const { error } = await supabase.from('vaults').upsert({
     user_id:    userId,
     salt:       saltB64,
     iv:         encBlob.iv,
     ciphertext: encBlob.ct,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt || new Date().toISOString(),
   });
   if (error) return { ok: false, reason: error.message };
   return { ok: true };
@@ -86,6 +105,7 @@ export async function pushVault(userId, saltB64, encBlob) {
  */
 export async function pullVault(userId) {
   if (!supabaseEnabled) return { ok: false, reason: 'NOT_CONFIGURED' };
+  if (isVaultV2()) return { ok: false, reason: 'SYNC_PAUSED_V2' };
   const { data, error } = await supabase
     .from('vaults')
     .select('salt, iv, ciphertext, updated_at')
