@@ -976,8 +976,19 @@ export default function VaultApp({ onBack }) {
         notes: nd.notes.trim(),
       };
       const newDocs = editingId
-        ? docs.map((doc) => doc.id === id ? { ...doc, ...cleanDoc } : doc)
-        : [...docs, { ...cleanDoc, id }];
+        ? docs.map((doc) => {
+            if (doc.id !== id) return doc;
+            // Push the current state to versions before overwriting.
+            const versions = Array.isArray(doc.versions) ? [...doc.versions] : [];
+            versions.unshift({
+              ts: new Date().toISOString(),
+              name: doc.name, num: doc.num, by: doc.by, cat: doc.cat,
+              issued: doc.issued, expires: doc.expires, notes: doc.notes,
+            });
+            while (versions.length > 5) versions.pop(); // cap at 5 versions
+            return { ...doc, ...cleanDoc, versions };
+          })
+        : [...docs, { ...cleanDoc, id, versions: [] }];
       const newImgs = filePrev ? { ...imgs, [id]: filePrev } : imgs;
       const result = await persist(newDocs, newImgs);
 
@@ -1600,6 +1611,43 @@ export default function VaultApp({ onBack }) {
                 <div style={{ background: 'var(--sur2)', border: '1px solid var(--bd)', borderLeft: `3px solid ${cc}`, borderRadius: 10, padding: '11px 14px', marginBottom: 16 }}>
                   <div className="lbl" style={{ marginBottom: 4 }}>Notes</div>
                   <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6 }}>{docView.notes}</div>
+                </div>
+              )}
+
+              {/* Version history */}
+              {docView.versions && docView.versions.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="lbl" style={{ marginBottom: 8 }}>Version History</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {docView.versions.map((v, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg2)', borderRadius: 8, border: '1px solid var(--bd)' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 600 }}>{v.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--tx4)' }}>
+                            {new Date(v.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="abtn abg"
+                          style={{ fontSize: 11, padding: '3px 8px', flexShrink: 0 }}
+                          onClick={() => {
+                            const restored = { ...docView, ...v, versions: docView.versions };
+                            const newDocs = docs.map((d) => d.id === docView.id ? restored : d);
+                            persist(newDocs, imgs).then((result) => {
+                              if (result.ok) {
+                                setDocs(newDocs);
+                                setDocView(restored);
+                                showToast('Version restored');
+                              }
+                            });
+                          }}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
