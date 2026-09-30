@@ -359,6 +359,8 @@ select.ainp option { background: var(--sur); color: var(--tx); }
   .mob-nav   { display: flex; }
   .top-s     { display: none; }
   .c-area    { padding: 16px 16px 80px; }
+  .sb-hamburger { display: inline-flex !important; }
+  .stc { min-width: calc(50% - 7px); flex: 1; }
 }
 @media (max-width: 900px) { .feat-grid  { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) {

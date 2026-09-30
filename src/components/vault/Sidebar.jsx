@@ -17,10 +17,33 @@ export default function Sidebar({
   sbCollapsed, setSbCollapsed, cat, setCat, docs, onEmergency, onAlerts, notifOpen, notifs,
   onPinChange, onExport, onImport, onAuditLog, onLock, onBack, user, authBusy,
   onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled,
+  isDrawer, onClose,
 }) {
   const { canInstall, installed, promptInstall } = usePwaInstall();
+  const asideStyle = isDrawer
+    ? {
+        position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100,
+        width: 280, background: 'var(--sur)', backdropFilter: 'blur(20px)',
+        borderRight: '1px solid var(--bd)', padding: '16px 10px',
+        display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto',
+        boxShadow: 'var(--s4)',
+      }
+    : {
+        width: sbCollapsed ? 64 : 215, background: 'var(--gl)', backdropFilter: 'blur(20px)',
+        borderRight: '1px solid var(--bd)', padding: '16px 10px',
+        display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto',
+      };
+
   return (
-    <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={{ width: sbCollapsed ? 64 : 215, background: 'var(--gl)', backdropFilter: 'blur(20px)', borderRight: '1px solid var(--bd)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, overflowY: 'auto' }}>
+    <>
+      {isDrawer && (
+        <div
+          onClick={onClose}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 99 }}
+          aria-label="Close menu"
+        />
+      )}
+      <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={asideStyle}>
       <div style={{ padding: '8px 10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <ShieldCheck size={17} color="#fff" />
@@ -127,5 +150,6 @@ export default function Sidebar({
         <Lock size={15} /><span style={{ flex: 1, fontSize: 13 }}>Lock Vault</span>
       </button>
     </aside>
+    </>
   );
 }

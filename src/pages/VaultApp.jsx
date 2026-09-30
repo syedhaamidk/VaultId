@@ -4,7 +4,7 @@ import {
   Upload, Trash2, Copy, Check, Clock, AlertCircle,
   Loader2, Zap, Share2, Pencil, Bell, ChevronRight,
   CreditCard, Activity, Wallet, Home, Scale,
-  Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe, LogOut,
+  Sparkles, Shield, FolderOpen, Download, MoreVertical, Globe, LogOut, Smartphone,
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon, compressImage } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
@@ -17,6 +17,7 @@ import Sidebar from '../components/vault/Sidebar.jsx';
 import DocumentCard from '../components/vault/DocumentCard.jsx';
 import DocumentModal from '../components/vault/DocumentModal.jsx';
 import { AddDocumentModal, EmergencyModal, ChangePinModal, UpgradePrompt, ScanConsent, AuditLogModal } from '../components/vault/Modals.jsx';
+import { usePwaInstall } from '../utils/usePwaInstall.js';
 
 // ── AI document scanner ────────────────────────────────────────────────────────
 async function scanDocumentWithAI(file) {
@@ -96,6 +97,7 @@ export default function VaultApp({ onBack }) {
   const [showScanConsent, setShowScanConsent] = useState(false);
   const [pendingScanFile, setPendingScanFile] = useState(null);
   const [showAuditLog, setShowAuditLog] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ── cloud sync / auth ──
   const [user,       setUser]       = useState(null);
@@ -157,6 +159,7 @@ export default function VaultApp({ onBack }) {
   const mutationBusyRef = useRef(false);
   const persistQueueRef = useRef(Promise.resolve());
   const pinRef = useRef(null);
+  const { canInstall, installed, promptInstall } = usePwaInstall();
 
   // Boot delay
   useEffect(() => {
@@ -1157,9 +1160,9 @@ export default function VaultApp({ onBack }) {
         sbCollapsed={sbCollapsed}
         setSbCollapsed={setSbCollapsed}
         cat={cat}
-        setCat={setCat}
+        setCat={(k) => { setCat(k); if (sidebarOpen) setSidebarOpen(false); }}
         docs={docs}
-        onEmergency={openEmergency}
+        onEmergency={() => { openEmergency(); if (sidebarOpen) setSidebarOpen(false); }}
         onAlerts={() => setNotifOpen((o) => !o)}
         notifOpen={notifOpen}
         notifs={notifs}
@@ -1176,6 +1179,8 @@ export default function VaultApp({ onBack }) {
         syncing={syncing}
         syncErr={syncErr}
         supabaseEnabled={supabaseEnabled}
+        isDrawer={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <input
         id="import-file-input"
@@ -1190,14 +1195,26 @@ export default function VaultApp({ onBack }) {
 
         {/* Topbar */}
         <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--gl)', backdropFilter: 'blur(20px)', flexShrink: 0, gap: 12 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", color: 'var(--tx)' }}>
-              {VAULT_CAT[cat].label}
-            </h2>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--tx3)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {filtered.length} doc{filtered.length !== 1 ? 's' : ''}
-              <span className="sbadge" style={{ fontSize: 10, padding: '1px 7px' }}><Shield size={9} />AES-256</span>
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Mobile hamburger — opens the sidebar as a drawer */}
+            <button
+              className="abic"
+              aria-label="Open menu"
+              onClick={() => setSidebarOpen(true)}
+              style={{ border: '1px solid var(--bd)', display: 'none' }}
+              className="abic sb-hamburger"
+            >
+              <MoreVertical size={15} />
+            </button>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", color: 'var(--tx)' }}>
+                {VAULT_CAT[cat].label}
+              </h2>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--tx3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {filtered.length} doc{filtered.length !== 1 ? 's' : ''}
+                <span className="sbadge" style={{ fontSize: 10, padding: '1px 7px' }}><Shield size={9} />AES-256</span>
+              </p>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div className="srch top-s">
@@ -1207,6 +1224,11 @@ export default function VaultApp({ onBack }) {
             <button className="abic" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setDark((d) => !d)} style={{ border: '1px solid var(--bd)' }}>
               {dark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
+            {canInstall && !installed && (
+              <button className="abic" aria-label="Install app" onClick={promptInstall} style={{ border: '1px solid var(--bd)' }}>
+                <Smartphone size={15} />
+              </button>
+            )}
             <button className="abtn abp" onClick={openAdd} style={{ fontSize: 13, padding: '7px 14px' }}>
               <Plus size={14} />Add
             </button>
