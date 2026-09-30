@@ -1,6 +1,7 @@
 import { X, Check, AlertTriangle, Shield, Sparkles, Download, Pencil, Share2, Loader2 } from 'lucide-react';
 import { DocForm } from '../../utils.jsx';
 import { validatePassphrase, MIN_PASSPHRASE_LENGTH } from '../../utils/passphraseValidation.js';
+import { getAuditLog } from '../../crypto.js';
 
 /**
  * All modals for the vault app, extracted from VaultApp for maintainability.
@@ -324,7 +325,6 @@ export function ScanConsent({ showScanConsent, onClose, onGroq, onDevice }) {
 
 export function AuditLogModal({ showAuditLog, onClose }) {
   if (!showAuditLog) return null;
-  const { getAuditLog } = require('../../crypto.js');
   const entries = getAuditLog();
   return (
     <div className="mbg" onClick={onClose}>
