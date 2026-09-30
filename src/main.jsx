@@ -5,6 +5,20 @@ import '@chomuiro/saisei/dist/blueprint.css';
 import './saisei-theme.css';
 import './index.css';
 
+// Unregister stale service workers and clear caches on version change.
+// Prevents blank-screen issues when a new build is deployed but the old
+// SW is still serving cached assets.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((reg) => reg.unregister());
+  });
+  if (window.caches) {
+    caches.keys().then((keys) => {
+      keys.forEach((key) => caches.delete(key));
+    });
+  }
+}
+
 // VaultID is a dark-first brand: lock the Saisei theme to dark.
 document.documentElement.dataset.theme = 'dark';
 
