@@ -137,14 +137,14 @@ button, .anv, .abic, .nk { -webkit-user-select: none; user-select: none; }
   font-family: 'Space Grotesk', sans-serif;
   font-size: clamp(38px, 6vw, 72px);
   font-weight: 800; letter-spacing: -2px; line-height: 1.05;
-  margin-bottom: 24px; animation: hero .7s ease both;
+  margin-bottom: 24px; animation: hero .7s ease backwards;
 }
 .hero p {
   font-size: clamp(15px, 2vw, 19px); color: var(--tx2);
   line-height: 1.7; margin-bottom: 36px;
-  animation: hero .7s .12s ease both;
+  animation: hero .7s .12s ease backwards;
 }
-.hero-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; animation: hero .7s .22s ease both; }
+.hero-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; animation: hero .7s .22s ease backwards; }
 
 .stat-bar {
   display: flex; justify-content: center; flex-wrap: wrap;

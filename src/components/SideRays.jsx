@@ -127,21 +127,37 @@ const SideRays = ({
     return () => observer.disconnect();
   }, []);
 
-  // Three.js setup
+  // Three.js setup — decorative only. Must NEVER crash the page:
+  // if WebGL is unavailable/blocked we render nothing and move on.
   useEffect(() => {
     if (!isVisible || !containerRef.current) return;
     const container = containerRef.current;
 
-    // renderer
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    const w = container.clientWidth  || 800;
-    const h = container.clientHeight || 600;
-    renderer.setSize(w, h);
-    const canvas = renderer.domElement;
-    canvas.style.position = 'absolute';
-    canvas.style.inset    = '0';
-    container.appendChild(canvas);
+    let renderer = null;
+    let rafId = 0;
+    let canvas = null;
+    let geometry = null;
+    let material = null;
+    const onContextLost = (e) => {
+      // GPU context gone (driver reset, resource pressure) — stop the loop
+      // instead of throwing on every subsequent render call.
+      e.preventDefault();
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = 0;
+    };
+
+    try {
+      // renderer
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      const w = container.clientWidth  || 800;
+      const h = container.clientHeight || 600;
+      renderer.setSize(w, h);
+      canvas = renderer.domElement;
+      canvas.style.position = 'absolute';
+      canvas.style.inset    = '0';
+      canvas.addEventListener('webglcontextlost', onContextLost);
+      container.appendChild(canvas);
 
     // scene / camera (orthographic — we do all projection in the vertex shader)
     const scene  = new THREE.Scene();
@@ -167,8 +183,8 @@ const SideRays = ({
     };
 
     // fullscreen quad — PlaneGeometry(2, 2) fills NDC exactly
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    const material = new THREE.ShaderMaterial({
+    geometry = new THREE.PlaneGeometry(2, 2);
+    material = new THREE.ShaderMaterial({
       uniforms,
       vertexShader:   VERT,
       fragmentShader: FRAG,
@@ -178,39 +194,64 @@ const SideRays = ({
     scene.add(new THREE.Mesh(geometry, material));
 
     // resize handler
-    const onResize = () => {
+    const handleResize = () => {
+      if (!renderer) return;
       const w2 = container.clientWidth;
       const h2 = container.clientHeight;
+      if (!w2 || !h2) return;
       renderer.setSize(w2, h2);
       uniforms.iResolution.value.set(
         w2 * renderer.getPixelRatio(),
         h2 * renderer.getPixelRatio()
       );
     };
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', handleResize);
 
-    // animation loop — skip for reduced-motion users (render one frame only)
+    // animation loop — skip for reduced-motion users (render one frame only).
+    // Every per-frame render is guarded: a mid-loop GPU failure must stop
+    // the loop, never propagate into React.
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      renderer.render(scene, camera);
-    } else {
-      const t0 = performance.now();
-      let rafId;
-      const loop = () => {
-        rafId = requestAnimationFrame(loop);
+    const t0 = performance.now();
+    const safeRender = () => {
+      try {
         uniforms.iTime.value = (performance.now() - t0) / 1000;
         renderer.render(scene, camera);
+      } catch {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    };
+    if (reduceMotion) {
+      safeRender();
+    } else {
+      const loop = () => {
+        rafId = requestAnimationFrame(loop);
+        safeRender();
+        if (!rafId) return; // context died mid-loop — stay stopped
       };
       loop();
     }
+    } catch {
+      // Renderer/scene setup failed (no WebGL, blocked GPU, etc.).
+      // Decorative layer only: clean up and leave the page fully usable.
+      if (rafId) { try { cancelAnimationFrame(rafId); } catch {} rafId = 0; }
+      try { geometry && geometry.dispose(); } catch {}
+      try { material && material.dispose(); } catch {}
+      try { renderer && renderer.dispose(); } catch {}
+      if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      return;
+    }
 
     return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', onResize);
-      geometry.dispose();
-      material.dispose();
-      renderer.dispose();
-      if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      if (rafId) { try { cancelAnimationFrame(rafId); } catch {} }
+      window.removeEventListener('resize', handleResize);
+      try { geometry && geometry.dispose(); } catch {}
+      try { material && material.dispose(); } catch {}
+      try { renderer && renderer.dispose(); } catch {}
+      if (canvas) {
+        try { canvas.removeEventListener('webglcontextlost', onContextLost); } catch {}
+        if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      }
     };
   // Re-mount when visibility or key props change
   // eslint-disable-next-line react-hooks/exhaustive-deps
