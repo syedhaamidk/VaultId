@@ -138,12 +138,25 @@ const SideRays = ({
     let canvas = null;
     let geometry = null;
     let material = null;
+    let uniforms = null;
     const onContextLost = (e) => {
       // GPU context gone (driver reset, resource pressure) — stop the loop
       // instead of throwing on every subsequent render call.
       e.preventDefault();
       if (rafId) cancelAnimationFrame(rafId);
       rafId = 0;
+    };
+    // Effect-scoped so BOTH the setup block and the cleanup below can see it.
+    const handleResize = () => {
+      if (!renderer || !uniforms) return;
+      const w2 = container.clientWidth;
+      const h2 = container.clientHeight;
+      if (!w2 || !h2) return;
+      renderer.setSize(w2, h2);
+      uniforms.iResolution.value.set(
+        w2 * renderer.getPixelRatio(),
+        h2 * renderer.getPixelRatio()
+      );
     };
 
     try {
@@ -165,7 +178,7 @@ const SideRays = ({
 
     // uniforms
     const [flipX, flipY] = originToFlip(origin);
-    const uniforms = {
+    uniforms = {
       iTime:       { value: 0 },
       iResolution: { value: new THREE.Vector2(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()) },
       iSpeed:      { value: speed },
@@ -193,18 +206,7 @@ const SideRays = ({
     });
     scene.add(new THREE.Mesh(geometry, material));
 
-    // resize handler
-    const handleResize = () => {
-      if (!renderer) return;
-      const w2 = container.clientWidth;
-      const h2 = container.clientHeight;
-      if (!w2 || !h2) return;
-      renderer.setSize(w2, h2);
-      uniforms.iResolution.value.set(
-        w2 * renderer.getPixelRatio(),
-        h2 * renderer.getPixelRatio()
-      );
-    };
+    // resize handler (defined at effect scope so cleanup can remove it)
     window.addEventListener('resize', handleResize);
 
     // animation loop — skip for reduced-motion users (render one frame only).

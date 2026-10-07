@@ -9,7 +9,8 @@ import {
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon, compressImage } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
 import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote, logAudit, getAuditLog } from '../crypto.js';
-import { syncVault } from '../sync.js';
+import { syncVault, getCurrentUser, onAuthChange, signInWithGoogle, signOut } from '../sync.js';
+import { supabase, supabaseEnabled } from '../supabaseClient.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
 import { scanOnDevice } from '../utils/onDeviceScan.js';
 import LockScreen from '../components/vault/LockScreen.jsx';
