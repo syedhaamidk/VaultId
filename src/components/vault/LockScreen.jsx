@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShieldCheck, Sun, Moon, ChevronRight, Loader2, Check, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Sun, Moon, ChevronRight, Loader2, Check, AlertTriangle, Globe } from 'lucide-react';
 
 /**
  * Lock screen — handles v1 (PIN keypad) and v2 (passphrase) unlock.

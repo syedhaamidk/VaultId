@@ -1,4 +1,4 @@
-import { X, Check, AlertTriangle, Shield, Sparkles, Download, Pencil, Share2, Loader2 } from 'lucide-react';
+import { X, Check, AlertTriangle, Shield, Sparkles, Download, Pencil, Share2, Loader2, Upload, AlertCircle } from 'lucide-react';
 import { DocForm } from '../../utils.jsx';
 import { validatePassphrase, MIN_PASSPHRASE_LENGTH } from '../../utils/passphraseValidation.js';
 import { getAuditLog } from '../../crypto.js';
