@@ -18,7 +18,7 @@ const CAT_ICONS = {
 export default function Sidebar({
   sbCollapsed, setSbCollapsed, cat, setCat, docs, onEmergency, onAlerts, notifOpen, notifs,
   onPinChange, onExport, onImport, onAuditLog, onLock, onBack, user, authBusy,
-  onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled,
+  onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled, vaultVersion,
   isDrawer, onClose,
 }) {
   const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
@@ -101,8 +101,8 @@ export default function Sidebar({
           </span>
         )}
       </button>
-      <button type="button" className="anv" onClick={onPinChange} data-tip={sbCollapsed ? 'Change PIN' : undefined} aria-label="Change PIN">
-        <Lock size={15} /><span style={{ flex: 1 }}>Change PIN</span>
+      <button type="button" className="anv" onClick={onPinChange} data-tip={sbCollapsed ? (vaultVersion === 'v2' ? 'Change passphrase' : 'Change PIN') : undefined} aria-label={vaultVersion === 'v2' ? 'Change passphrase' : 'Change PIN'}>
+        <Lock size={15} /><span style={{ flex: 1 }}>{vaultVersion === 'v2' ? 'Change Passphrase' : 'Change PIN'}</span>
       </button>
 
       <div style={{ flex: 1 }} />

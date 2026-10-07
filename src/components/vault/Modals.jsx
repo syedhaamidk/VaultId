@@ -132,10 +132,10 @@ export function EmergencyModal({ emOpen, emergency, qrDataUrl, qrError, emDraft,
             {[
               { l: 'Blood Type', v: <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--re)', fontFamily: "'Space Grotesk', sans-serif" }}>{emergency.bloodType || '—'}</span> },
               { l: 'Organ Donor', v: emergency.donor ? 'Yes ✓' : 'No' },
-              { l: 'Allergies', v: emergency.allergies.join(', ') || 'None listed' },
-              { l: 'Medications', v: emergency.medications.join(', ') || 'None listed' },
-              { l: 'Conditions', v: emergency.conditions.join(', ') || 'None listed' },
-              { l: 'Emergency Contact', v: <div><div style={{ fontWeight: 600, fontSize: 13, color: 'var(--tx)' }}>{emergency.contact.name || 'Not provided'}</div><div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>{emergency.contact.phone}</div></div> },
+              { l: 'Allergies', v: (emergency.allergies || []).join(', ') || 'None listed' },
+              { l: 'Medications', v: (emergency.medications || []).join(', ') || 'None listed' },
+              { l: 'Conditions', v: (emergency.conditions || []).join(', ') || 'None listed' },
+              { l: 'Emergency Contact', v: <div><div style={{ fontWeight: 600, fontSize: 13, color: 'var(--tx)' }}>{(emergency.contact || {}).name || 'Not provided'}</div><div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>{(emergency.contact || {}).phone}</div></div> },
             ].map((r) => (
               <div key={r.l}>
                 <div className="lbl" style={{ marginBottom: 4 }}>{r.l}</div>
@@ -163,13 +163,13 @@ export function EmergencyModal({ emOpen, emergency, qrDataUrl, qrError, emDraft,
               <input className="ainp" value={emDraft.bloodType} onChange={(e) => setEmDraft((value) => ({ ...value, bloodType: e.target.value }))} placeholder="e.g. O+" />
             </label>
             <label className="lbl">Allergies (comma-separated)
-              <input className="ainp" value={emDraft.allergies.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, allergies: listFromText(e.target.value) }))} placeholder="None" />
+              <input className="ainp" value={(emDraft.allergies || []).join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, allergies: listFromText(e.target.value) }))} placeholder="None" />
             </label>
             <label className="lbl">Medications (comma-separated)
-              <input className="ainp" value={emDraft.medications.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, medications: listFromText(e.target.value) }))} placeholder="None" />
+              <input className="ainp" value={(emDraft.medications || []).join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, medications: listFromText(e.target.value) }))} placeholder="None" />
             </label>
             <label className="lbl">Conditions (comma-separated)
-              <input className="ainp" value={emDraft.conditions.join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, conditions: listFromText(e.target.value) }))} placeholder="None" />
+              <input className="ainp" value={(emDraft.conditions || []).join(', ')} onChange={(e) => setEmDraft((value) => ({ ...value, conditions: listFromText(e.target.value) }))} placeholder="None" />
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <label className="lbl">Contact name

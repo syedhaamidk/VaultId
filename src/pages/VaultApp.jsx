@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Badge, TiltCard, DocForm, daysLeft, fmtDate, docIcon, compressImage } from '../utils.jsx';
 import { VAULT_CAT, DOCS0, EMPTY_EMERGENCY, DEMO_EMERGENCY, DEMO_PIN } from '../data.js';
-import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote, logAudit, getAuditLog } from '../crypto.js';
+import { tryUnlock, saveVault, changePin, exportLocalBlob, markVaultSynced, tryUnlockFromRemote, KDF_ITERATIONS, getVaultVersion, upgradeV1ToV2, clearV1Backup, hasV1Backup, createVaultV2, tryUnlockV2FromRemote, logAudit, getAuditLog, changePassphraseV2, getCurrentV2Blob } from '../crypto.js';
 import { syncVault, getCurrentUser, onAuthChange, signInWithGoogle, signOut, pullVault, pushVault } from '../sync.js';
 import { supabase, supabaseEnabled } from '../supabaseClient.js';
 import PassphraseSetup from '../components/PassphraseSetup.jsx';
@@ -95,6 +95,7 @@ export default function VaultApp({ onBack }) {
   const [vaultVersion, setVaultVersion] = useState('none'); // none | v1 | v2
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
+  const [passphraseSetupMode, setPassphraseSetupMode] = useState('create'); // create | change
   const [passphraseInput, setPassphraseInput] = useState('');
   const [showScanConsent, setShowScanConsent] = useState(false);
   const [pendingScanFile, setPendingScanFile] = useState(null);
@@ -787,21 +788,50 @@ export default function VaultApp({ onBack }) {
   // ── v1 → v2 upgrade ───────────────────────────────────────────────────────
   function handleUpgrade() {
     setShowUpgradePrompt(false);
+    setPassphraseSetupMode('create');
     setShowPassphraseSetup(true);
+  }
+
+  // ── v2: rotate passphrase (DEK is re-wrapped; data stays intact) ────────────
+  async function handlePassphraseChange(oldPp, newPp) {
+    // NOTE: exportLocalBlob() is the v1 shape ({saltB64, enc}) and returns
+    // null for v2 vaults — rotation needs the live v2 blob object instead.
+    const blob = getCurrentV2Blob();
+    if (!blob) {
+      showToast('Could not read vault.', 'err');
+      return;
+    }
+    const res = await changePassphraseV2(oldPp, newPp, blob);
+    if (!res.ok) {
+      showToast(res.reason === 'WRONG_PASSPHRASE' ? 'Current passphrase is incorrect.' : 'Could not change passphrase.', 'err');
+      return;
+    }
+    setShowPassphraseSetup(false);
+    setPassphraseSetupMode('create');
+    const cloud = await pushEncryptedBlob(res.blob);
+    logAudit('passphrase_change');
+    const cloudConfigured = Boolean(user && supabaseEnabled);
+    showToast(
+      !cloudConfigured ? 'Passphrase changed locally' : cloud.ok ? 'Passphrase changed and synced' : 'Passphrase changed locally; cloud sync failed',
+      !cloudConfigured || cloud.ok ? 'ok' : 'err',
+    );
   }
 
   async function handlePassphraseCreate(passphrase) {
     setShowPassphraseSetup(false);
+    setPassphraseSetupMode('create');
 
     if (vaultVersion === 'none') {
-      const r = await createVaultV2(passphrase, [], {}, {});
+      const r = await createVaultV2(passphrase, [], cloneEmergency(EMPTY_EMERGENCY), {});
       if (r.ok) {
         setCryptoKey(r.key);
         setDocs(r.docs);
         setImgs(r.imgs);
         setEmergency(r.emergency);
         setVaultVersion('v2');
+        setUnlockOk(true);
         showToast('Vault created with AES-256-GCM');
+        setTimeout(() => { setPhase('open'); setUnlockOk(false); }, 550);
       } else {
         showToast('Could not create vault', 'err');
       }
@@ -813,11 +843,19 @@ export default function VaultApp({ onBack }) {
         setImgs(r.imgs);
         setEmergency(r.emergency);
         setVaultVersion('v2');
+        setUnlockOk(true);
         showToast('Vault upgraded to passphrase security');
+        setTimeout(() => { setPhase('open'); setUnlockOk(false); }, 550);
       } else {
         showToast('Upgrade failed — v1 vault unchanged', 'err');
       }
     }
+  }
+
+  // Routes PassphraseSetup submit by mode: rotation vs creation/upgrade.
+  function handlePassphraseSetupSubmit(newPp, _recoveryKey, currentPp) {
+    if (passphraseSetupMode === 'change') handlePassphraseChange(currentPp, newPp);
+    else handlePassphraseCreate(newPp);
   }
 
   function openPinModal() {
@@ -1128,6 +1166,7 @@ export default function VaultApp({ onBack }) {
   // LOCK SCREEN
   // ═══════════════════════════════════════════════════════════════════════════
   if (phase !== 'open') return (
+    <>
     <LockScreen
       phase={phase}
       dark={dark}
@@ -1156,6 +1195,16 @@ export default function VaultApp({ onBack }) {
       DEMO_PIN={DEMO_PIN}
       PIN_LEN={PIN_LEN}
     />
+    {/* Passphrase setup must mount while locked: new users create their
+        vault from the lock screen, and v1 users upgrade from it. */}
+    {showPassphraseSetup && (
+      <PassphraseSetup
+        mode={passphraseSetupMode}
+        onCreate={handlePassphraseSetupSubmit}
+        onCancel={() => { setShowPassphraseSetup(false); setPassphraseSetupMode('create'); }}
+      />
+    )}
+    </>
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1174,7 +1223,10 @@ export default function VaultApp({ onBack }) {
         onAlerts={() => setNotifOpen((o) => !o)}
         notifOpen={notifOpen}
         notifs={notifs}
-        onPinChange={openPinModal}
+        onPinChange={() => {
+          if (vaultVersion === 'v2') { setPassphraseSetupMode('change'); setShowPassphraseSetup(true); }
+          else openPinModal();
+        }}
         onExport={exportVault}
         onImport={() => document.getElementById('import-file-input')?.click()}
         onAuditLog={() => setShowAuditLog(true)}
@@ -1187,6 +1239,7 @@ export default function VaultApp({ onBack }) {
         syncing={syncing}
         syncErr={syncErr}
         supabaseEnabled={supabaseEnabled}
+        vaultVersion={vaultVersion}
         isDrawer={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -1410,8 +1463,9 @@ export default function VaultApp({ onBack }) {
       {/* ═══ PASSPHRASE SETUP ═══ */}
       {showPassphraseSetup && (
         <PassphraseSetup
-          onCreate={handlePassphraseCreate}
-          onCancel={() => setShowPassphraseSetup(false)}
+          mode={passphraseSetupMode}
+          onCreate={handlePassphraseSetupSubmit}
+          onCancel={() => { setShowPassphraseSetup(false); setPassphraseSetupMode('create'); }}
         />
       )}
 

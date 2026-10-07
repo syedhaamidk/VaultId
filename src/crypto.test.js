@@ -18,7 +18,7 @@ import {
   tryUnlock, saveVault, changePin, exportLocalBlob, resetVault,
   createVaultV2, unlockVaultV2, saveVaultV2, changePassphraseV2,
   addRecoverySlotV2, unlockWithRecoveryV2, removeSlotV2,
-  upgradeV1ToV2, hasV1Backup, clearV1Backup, getVaultVersion,
+  upgradeV1ToV2, hasV1Backup, clearV1Backup, getVaultVersion, getCurrentV2Blob,
 } from './crypto.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -475,6 +475,26 @@ describe('crypto.js', () => {
     expect(getVaultVersion()).toBe('v1');
     await upgradeV1ToV2('123456', 'new-passphrase');
     expect(getVaultVersion()).toBe('v2');
+  });
+
+  it('getCurrentV2Blob: returns the live v2 blob, null otherwise', async () => {
+    expect(getCurrentV2Blob()).toBeNull();
+    await tryUnlock('123456', DOCS, EMERGENCY);
+    // v1 shape has no slots — not a v2 blob.
+    expect(getCurrentV2Blob()).toBeNull();
+    const c = await createVaultV2('rotation-test-passphrase', DOCS, IMGS, EMERGENCY);
+    expect(c.ok).toBe(true);
+    const blob = getCurrentV2Blob();
+    expect(blob).not.toBeNull();
+    expect(blob.v).toBe(2);
+    expect(blob.rev).toBe(1);
+    // The returned blob must drive a successful passphrase rotation.
+    const ch = await changePassphraseV2('rotation-test-passphrase', 'rotated-test-passphrase', blob);
+    expect(ch.ok).toBe(true);
+    expect(ch.blob.rev).toBe(2);
+    const u = await unlockVaultV2('rotated-test-passphrase', ch.blob);
+    expect(u.ok).toBe(true);
+    expect(u.docs).toEqual(DOCS);
   });
 
 });

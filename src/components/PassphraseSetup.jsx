@@ -12,7 +12,9 @@ import { validatePassphrase, MIN_PASSPHRASE_LENGTH } from '../utils/passphraseVa
  * The passphrase is held in component state only as long as needed and
  * cleared immediately after creation. It is never logged or persisted.
  */
-export default function PassphraseSetup({ onCreate, onCancel }) {
+export default function PassphraseSetup({ onCreate, onCancel, mode = 'create' }) {
+  const isChange = mode === 'change';
+  const [current, setCurrent] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassphrase, setShowPassphrase] = useState(false);
@@ -34,8 +36,11 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
   }, [passphrase]);
 
   // ── Validation ─────────────────────────────────────────────────────────────
-  const { errors } = validatePassphrase(passphrase, confirm, acknowledged);
-  const isValid = errors.length === 0 && passphrase.length > 0 && acknowledged;
+  const { errors: baseErrors } = validatePassphrase(passphrase, confirm, acknowledged);
+  const errors = isChange && !current
+    ? ['Enter your current passphrase.', ...baseErrors]
+    : baseErrors;
+  const isValid = errors.length === 0 && passphrase.length > 0 && acknowledged && (!isChange || current.length > 0);
 
   // ── Recovery key ──────────────────────────────────────────────────────────
   const generateRecoveryKey = useCallback(() => {
@@ -64,11 +69,13 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
     if (!isValid) return;
     // Clear sensitive fields immediately after capturing the value.
     const pp = passphrase;
+    const cur = current;
+    setCurrent('');
     setPassphrase('');
     setConfirm('');
     setShowPassphrase(false);
-    onCreate(pp, recoveryKey);
-  }, [isValid, passphrase, recoveryKey, onCreate]);
+    onCreate(pp, recoveryKey, cur);
+  }, [isValid, passphrase, recoveryKey, current, onCreate]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const lbl = {
@@ -85,18 +92,33 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
         className="mbox si"
         role="dialog"
         aria-modal="true"
-        aria-label="Create passphrase"
+        aria-label={isChange ? 'Change passphrase' : 'Create passphrase'}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--tx)', fontFamily: "'Space Grotesk', sans-serif" }}>
-            Create Passphrase
+            {isChange ? 'Change Passphrase' : 'Create Passphrase'}
           </h3>
           <button className="abic" aria-label="Close" onClick={onCancel}><span aria-hidden="true">×</span></button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Current passphrase (change mode only) */}
+          {isChange && (
+            <div>
+              <label htmlFor="pp-current" style={lbl}>Current Passphrase</label>
+              <input
+                id="pp-current"
+                className="ainp"
+                type={showPassphrase ? 'text' : 'password'}
+                value={current}
+                onChange={(e) => setCurrent(e.target.value)}
+                autoComplete="current-password"
+                style={{ width: '100%' }}
+              />
+            </div>
+          )}
           {/* Passphrase */}
           <div>
             <label htmlFor="pp-pass" style={lbl}>Passphrase (min {MIN_PASSPHRASE_LENGTH} characters)</label>
@@ -185,7 +207,8 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
             </label>
           </div>
 
-          {/* Recovery key (optional) */}
+          {/* Recovery key (optional — creation only; rotation keeps existing slots) */}
+          {!isChange && (
           <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '.6px' }}>
@@ -227,6 +250,7 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
               </div>
             )}
           </div>
+          )}
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 10, marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--bd)', justifyContent: 'flex-end' }}>
@@ -238,7 +262,7 @@ export default function PassphraseSetup({ onCreate, onCancel }) {
               disabled={!isValid}
               style={{ opacity: isValid ? 1 : 0.5, cursor: isValid ? 'pointer' : 'not-allowed' }}
             >
-              <Check size={14} />Create Vault
+              <Check size={14} />{isChange ? 'Save New Passphrase' : 'Create Vault'}
             </button>
           </div>
         </div>

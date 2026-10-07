@@ -177,6 +177,13 @@ function asV2Blob(raw) {
   return null;
 }
 
+// Returns the current v2 blob from localStorage (parsed + validated), or
+// null when there is no vault or it isn't v2. Read-only accessor for UI
+// flows (e.g. passphrase rotation) that need the live blob object.
+export function getCurrentV2Blob() {
+  return asV2Blob(LS.get('vid_vault'));
+}
+
 // Returns true if the local vault is v2 (or if no vault exists yet —
 // new vaults will be v2). Used by the sync guard.
 export function isVaultV2() {
