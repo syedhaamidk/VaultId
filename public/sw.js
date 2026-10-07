@@ -2,6 +2,11 @@ const CACHE_NAME = 'vaultid-v2';
 const urlsToCache = [
   '/',
   '/index.html',
+  '/manifest.json',
+  '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/offline.html',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1,10 +1,10 @@
-import { lazy, Suspense } from 'react';
-import { Shield, Sparkles, Zap, Clock, Globe, Lock, ShieldCheck } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
+import { Shield, Sparkles, Zap, Clock, Globe, Lock, ShieldCheck, Download } from 'lucide-react';
 import CardNav from '../components/CardNav.jsx';
 import { Button, Card, Badge, TiltCard, Reveal } from '@chomuiro/saisei/react';
 import { useLowEndDevice } from '../utils/useLowEndDevice.js';
 import { usePwaInstall } from '../utils/usePwaInstall.js';
-import { Download } from 'lucide-react';
+import IosInstallSheet from '../components/IosInstallSheet.jsx';
 
 const SideRays = lazy(() => import('../components/SideRays.jsx'));
 import { NAV_ITEMS, FEATS } from '../data.js';
@@ -33,7 +33,14 @@ const NavLogo = (
 
 export default function LandingPage({ onEnterVault, onPrivacy }) {
   const isLowEnd = useLowEndDevice();
-  const { canInstall, installed, promptInstall } = usePwaInstall();
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [iosHint, setIosHint] = useState(false);
+  // Chromium/Android: native install prompt. iOS Safari: manual instructions.
+  const showInstall = (canInstall || isIos) && !installed;
+  const onInstallClick = () => {
+    if (canInstall) promptInstall();
+    else setIosHint(true);
+  };
 
   return (
     <div className="site" style={{ minHeight: '100vh' }}>
@@ -94,10 +101,10 @@ export default function LandingPage({ onEnterVault, onPrivacy }) {
             >
               See How It Works
             </Button>
-            {canInstall && !installed && (
+            {showInstall && (
               <Button
                 variant="ghost"
-                onClick={promptInstall}
+                onClick={onInstallClick}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
                 <Download size={14} />Install App
@@ -106,6 +113,7 @@ export default function LandingPage({ onEnterVault, onPrivacy }) {
           </div>
         </div>
       </section>
+      <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
 
       {/* ── Stats bar ───────────────────────────────────────────────────────── */}
       <div className="stat-bar" id="security">

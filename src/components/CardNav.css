@@ -141,9 +141,12 @@
 .nav-card-link:hover { opacity: 1; }
 .nav-card-link-icon  { flex-shrink: 0; }
 
+/* In-menu vault entry — hidden on desktop (top-bar CTA covers it) */
+.card-nav-menu-cta { display: none; }
+
 /* ── Mobile ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .card-nav-container { width: 92%; top: 12px; }
+  .card-nav-container { width: 92%; top: max(12px, env(safe-area-inset-top)); }
   .card-nav-top { padding: 0 1rem; justify-content: space-between; }
   .hamburger-menu  { order: 2; }
   .logo-container  { position: static; transform: none; order: 1; }
@@ -154,8 +157,17 @@
     gap: 8px;
     padding: 0.5rem;
     justify-content: flex-start;
+    overflow-y: auto;
   }
-  .nav-card        { height: auto; min-height: 60px; flex: 1 1 auto; }
+  .nav-card        { height: auto; min-height: 60px; flex: 0 0 auto; }
   .nav-card-label  { font-size: 17px; }
   .nav-card-link   { font-size: 13px; }
+  /* In-menu vault entry — only place to open the vault on small screens */
+  .card-nav-menu-cta {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 48px; border: none; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(135deg, #7B6FE8, #C060F0);
+    color: #fff; font-weight: 700; font-size: 15px; font-family: inherit;
+    margin-top: 2px; flex-shrink: 0;
+  }
 }

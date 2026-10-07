@@ -16,7 +16,7 @@ export default function LockScreen({
     <div
       className="app"
       data-t={dark ? 'dark' : 'light'}
-      style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', position: 'relative', overflow: 'hidden' }}
+      style={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', position: 'relative', overflow: 'hidden', padding: 'max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom))' }}
     >
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, background: 'radial-gradient(circle, var(--acs) 0%, transparent 65%)', pointerEvents: 'none' }} />
 
@@ -29,7 +29,7 @@ export default function LockScreen({
         </button>
       )}
 
-      <div className="acard fl" style={{ padding: '44px 52px', textAlign: 'center', minWidth: 360, boxShadow: 'var(--s4)' }}>
+      <div className="acard fl" style={{ padding: 'clamp(28px, 7vw, 44px) clamp(20px, 6vw, 52px)', textAlign: 'center', width: 'min(420px, calc(100vw - 32px))', boxShadow: 'var(--s4)' }}>
         <div style={{ position: 'relative', width: 76, height: 76, margin: '0 auto 22px' }}>
           <div className="pu" style={{ position: 'absolute', top: -12, right: -12, bottom: -12, left: -12, borderRadius: '50%', border: '2px solid var(--ac1)', opacity: 0.6 }} />
           <div style={{ width: 76, height: 76, borderRadius: '50%', background: 'var(--acs)', border: '2px solid var(--ac1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: unlockOk ? 'var(--gr)' : 'var(--act)', transition: 'color .3s' }}>

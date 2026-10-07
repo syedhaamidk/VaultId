@@ -189,6 +189,16 @@ const CardNav = ({
               </div>
             </div>
           ))}
+          {/* Mobile entry point — the top-bar CTA is hidden on small screens */}
+          <button
+            type="button"
+            className="card-nav-menu-cta"
+            tabIndex={isExpanded ? 0 : -1}
+            onClick={() => { closeMenu(); onCTA?.(); }}
+          >
+            Open Vault
+            <ArrowUpRight aria-hidden="true" size={14} />
+          </button>
         </div>
       </nav>
     </div>

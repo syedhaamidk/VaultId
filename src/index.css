@@ -3,6 +3,8 @@
 /* ── Reset ──────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
+/* Decorative layers (god-rays, glows) must never create horizontal scroll */
+html, body { overflow-x: clip; }
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 :focus-visible { outline: 2px solid var(--ac1, #7B6FE8); outline-offset: 2px; }
 ::-webkit-scrollbar { width: 4px; }
@@ -128,7 +130,7 @@ button, .anv, .abic, .nk { -webkit-user-select: none; user-select: none; }
 ═══════════════════════════════════════════════════════════════════════════════ */
 
 .hero {
-  position: relative; min-height: 100vh;
+  position: relative; min-height: 100vh; min-height: 100dvh;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; padding: 120px 24px 80px; overflow: hidden;
 }
@@ -361,6 +363,11 @@ select.ainp option { background: var(--sur); color: var(--tx); }
   .c-area    { padding: 16px 16px 80px; }
   .sb-hamburger { display: inline-flex !important; }
   .stc { min-width: calc(50% - 7px); flex: 1; }
+  /* Notched phones: keep content clear of the home indicator / cutout */
+  .site { padding-bottom: env(safe-area-inset-bottom); }
+  .hero { padding-top: max(110px, env(safe-area-inset-top)); padding-inline: 18px; }
+  .hero-btns .btn, .hero-btns button { min-height: 48px; }
+  .cta-section { padding-inline: 18px; }
 }
 @media (max-width: 900px) { .feat-grid  { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) {

@@ -18,6 +18,7 @@ import Sidebar from '../components/vault/Sidebar.jsx';
 import DocumentCard from '../components/vault/DocumentCard.jsx';
 import DocumentModal from '../components/vault/DocumentModal.jsx';
 import { AddDocumentModal, EmergencyModal, ChangePinModal, UpgradePrompt, ScanConsent, AuditLogModal } from '../components/vault/Modals.jsx';
+import IosInstallSheet from '../components/IosInstallSheet.jsx';
 import { usePwaInstall } from '../utils/usePwaInstall.js';
 
 // ── AI document scanner ────────────────────────────────────────────────────────
@@ -160,7 +161,13 @@ export default function VaultApp({ onBack }) {
   const mutationBusyRef = useRef(false);
   const persistQueueRef = useRef(Promise.resolve());
   const pinRef = useRef(null);
-  const { canInstall, installed, promptInstall } = usePwaInstall();
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [iosHint, setIosHint] = useState(false);
+  const showInstall = (canInstall || isIos) && !installed;
+  const onInstallClick = () => {
+    if (canInstall) promptInstall();
+    else setIosHint(true);
+  };
 
   // Boot delay
   useEffect(() => {
@@ -1225,11 +1232,12 @@ export default function VaultApp({ onBack }) {
             <button className="abic" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setDark((d) => !d)} style={{ border: '1px solid var(--bd)' }}>
               {dark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
-            {canInstall && !installed && (
-              <button className="abic" aria-label="Install app" onClick={promptInstall} style={{ border: '1px solid var(--bd)' }}>
+            {showInstall && (
+              <button className="abic" aria-label="Install app" onClick={onInstallClick} style={{ border: '1px solid var(--bd)' }}>
                 <Smartphone size={15} />
               </button>
             )}
+            <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
             <button className="abtn abp" onClick={openAdd} style={{ fontSize: 13, padding: '7px 14px' }}>
               <Plus size={14} />Add
             </button>

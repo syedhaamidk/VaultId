@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import {
   ShieldCheck, ChevronRight, Zap, Bell, Lock, Globe, LogOut,
   Loader2, Download, Upload, Clock, CreditCard, Activity, Wallet, Home, Scale, FolderOpen, Smartphone,
 } from 'lucide-react';
 import { VAULT_CAT } from '../../data.js';
 import { usePwaInstall } from '../../utils/usePwaInstall.js';
+import IosInstallSheet from '../IosInstallSheet.jsx';
 
 const CAT_ICONS = {
   all: FolderOpen, identity: CreditCard, medical: Activity,
@@ -19,7 +21,13 @@ export default function Sidebar({
   onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled,
   isDrawer, onClose,
 }) {
-  const { canInstall, installed, promptInstall } = usePwaInstall();
+  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
+  const [iosHint, setIosHint] = useState(false);
+  const showInstall = (canInstall || isIos) && !installed;
+  const onInstallClick = () => {
+    if (canInstall) promptInstall();
+    else setIosHint(true);
+  };
   const asideStyle = isDrawer
     ? {
         position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100,
@@ -109,11 +117,12 @@ export default function Sidebar({
       <button type="button" className="anv" style={{ color: 'var(--tx3)' }} data-tip={sbCollapsed ? 'Import vault' : undefined} aria-label="Import vault" onClick={onImport}>
         <Upload size={15} /><span style={{ flex: 1, fontSize: 13 }}>Import</span>
       </button>
-      {canInstall && !installed && (
-        <button type="button" className="anv" style={{ color: 'var(--tx3)' }} data-tip={sbCollapsed ? 'Install app' : undefined} aria-label="Install app" onClick={promptInstall}>
+      {showInstall && (
+        <button type="button" className="anv" style={{ color: 'var(--tx3)' }} data-tip={sbCollapsed ? 'Install app' : undefined} aria-label="Install app" onClick={onInstallClick}>
           <Smartphone size={15} /><span style={{ flex: 1, fontSize: 13 }}>Install App</span>
         </button>
       )}
+      <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
 
       {supabaseEnabled && (
         user ? (
