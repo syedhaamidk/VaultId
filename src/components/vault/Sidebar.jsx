@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { VAULT_CAT } from '../../data.js';
 import { usePwaInstall } from '../../utils/usePwaInstall.js';
-import IosInstallSheet from '../IosInstallSheet.jsx';
+import InstallHelpSheet from '../InstallHelpSheet.jsx';
 
 const CAT_ICONS = {
   all: FolderOpen, identity: CreditCard, medical: Activity,
@@ -21,12 +21,12 @@ export default function Sidebar({
   onGoogleSignIn, onSignOut, syncing, syncErr, supabaseEnabled, vaultVersion,
   isDrawer, onClose,
 }) {
-  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
-  const [iosHint, setIosHint] = useState(false);
-  const showInstall = (canInstall || isIos) && !installed;
+  const { canInstall, installed, platform, promptInstall } = usePwaInstall();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showInstall = !installed;
   const onInstallClick = () => {
     if (canInstall) promptInstall();
-    else setIosHint(true);
+    else setHelpOpen(true);
   };
   const asideStyle = isDrawer
     ? {
@@ -122,7 +122,7 @@ export default function Sidebar({
           <Smartphone size={15} /><span style={{ flex: 1, fontSize: 13 }}>Install App</span>
         </button>
       )}
-      <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
+      <InstallHelpSheet open={helpOpen} platform={platform} onClose={() => setHelpOpen(false)} />
 
       {supabaseEnabled && (
         user ? (

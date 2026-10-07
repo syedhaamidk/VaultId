@@ -18,7 +18,7 @@ import Sidebar from '../components/vault/Sidebar.jsx';
 import DocumentCard from '../components/vault/DocumentCard.jsx';
 import DocumentModal from '../components/vault/DocumentModal.jsx';
 import { AddDocumentModal, EmergencyModal, ChangePinModal, UpgradePrompt, ScanConsent, AuditLogModal } from '../components/vault/Modals.jsx';
-import IosInstallSheet from '../components/IosInstallSheet.jsx';
+import InstallHelpSheet from '../components/InstallHelpSheet.jsx';
 import { usePwaInstall } from '../utils/usePwaInstall.js';
 
 // ── AI document scanner ────────────────────────────────────────────────────────
@@ -162,12 +162,12 @@ export default function VaultApp({ onBack }) {
   const mutationBusyRef = useRef(false);
   const persistQueueRef = useRef(Promise.resolve());
   const pinRef = useRef(null);
-  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
-  const [iosHint, setIosHint] = useState(false);
-  const showInstall = (canInstall || isIos) && !installed;
+  const { canInstall, installed, platform, promptInstall } = usePwaInstall();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showInstall = !installed;
   const onInstallClick = () => {
     if (canInstall) promptInstall();
-    else setIosHint(true);
+    else setHelpOpen(true);
   };
 
   // Boot delay
@@ -1290,7 +1290,7 @@ export default function VaultApp({ onBack }) {
                 <Smartphone size={15} />
               </button>
             )}
-            <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
+            <InstallHelpSheet open={helpOpen} platform={platform} onClose={() => setHelpOpen(false)} />
             <button className="abtn abp" onClick={openAdd} style={{ fontSize: 13, padding: '7px 14px' }}>
               <Plus size={14} />Add
             </button>

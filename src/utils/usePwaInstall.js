@@ -17,6 +17,17 @@ function detectIos() {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
 }
 
+// Coarse platform used to pick install instructions when the native
+// prompt is unavailable: 'ios' | 'android' | 'desktop' | 'other'.
+function detectPlatform() {
+  if (typeof navigator === 'undefined') return 'other';
+  const ua = navigator.userAgent || '';
+  if (detectIos()) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  if (/Windows|Macintosh|MacIntel|Linux|X11|CrOS/.test(ua) || /Chrome|Edg|Safari|Firefox/.test(ua)) return 'desktop';
+  return 'other';
+}
+
 function detectStandalone() {
   if (typeof window === 'undefined') return false;
   if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
@@ -28,6 +39,7 @@ export function usePwaInstall() {
   const [canInstall, setCanInstall] = useState(false);
   const [installed, setInstalled] = useState(() => detectStandalone());
   const [isIos] = useState(() => detectIos());
+  const [platform] = useState(() => detectPlatform());
   const deferredRef = useRef(null);
 
   useEffect(() => {
@@ -71,5 +83,5 @@ export function usePwaInstall() {
     return accepted;
   }, []);
 
-  return { canInstall, installed, isIos, promptInstall };
+  return { canInstall, installed, isIos, platform, promptInstall };
 }

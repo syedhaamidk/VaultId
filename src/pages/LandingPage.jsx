@@ -4,7 +4,7 @@ import CardNav from '../components/CardNav.jsx';
 import { Button, Card, Badge, TiltCard, Reveal } from '@chomuiro/saisei/react';
 import { useLowEndDevice } from '../utils/useLowEndDevice.js';
 import { usePwaInstall } from '../utils/usePwaInstall.js';
-import IosInstallSheet from '../components/IosInstallSheet.jsx';
+import InstallHelpSheet from '../components/InstallHelpSheet.jsx';
 
 const SideRays = lazy(() => import('../components/SideRays.jsx'));
 import { NAV_ITEMS, FEATS } from '../data.js';
@@ -33,13 +33,14 @@ const NavLogo = (
 
 export default function LandingPage({ onEnterVault, onPrivacy }) {
   const isLowEnd = useLowEndDevice();
-  const { canInstall, installed, isIos, promptInstall } = usePwaInstall();
-  const [iosHint, setIosHint] = useState(false);
-  // Chromium/Android: native install prompt. iOS Safari: manual instructions.
-  const showInstall = (canInstall || isIos) && !installed;
+  const { canInstall, installed, platform, promptInstall } = usePwaInstall();
+  const [helpOpen, setHelpOpen] = useState(false);
+  // Native prompt when Chromium offers one; otherwise step-by-step
+  // instructions matched to the user's platform (iOS, Android, desktop).
+  const showInstall = !installed;
   const onInstallClick = () => {
     if (canInstall) promptInstall();
-    else setIosHint(true);
+    else setHelpOpen(true);
   };
 
   return (
@@ -113,7 +114,7 @@ export default function LandingPage({ onEnterVault, onPrivacy }) {
           </div>
         </div>
       </section>
-      <IosInstallSheet open={iosHint} onClose={() => setIosHint(false)} />
+      <InstallHelpSheet open={helpOpen} platform={platform} onClose={() => setHelpOpen(false)} />
 
       {/* ── Stats bar ───────────────────────────────────────────────────────── */}
       <div className="stat-bar" id="security">

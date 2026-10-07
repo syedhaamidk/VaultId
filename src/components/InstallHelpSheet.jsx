@@ -1,17 +1,43 @@
-import { X, Share, PlusSquare, Check } from 'lucide-react';
+import { X, Share, Plus, Check, MoreVertical, Download, Globe } from 'lucide-react';
 
 /**
- * IosInstallSheet — manual install instructions for iOS Safari, which has
- * no beforeinstallprompt event. Bottom-sheet styled to match the VaultID
- * dark UI (same surfaces, borders, gradient CTA as the rest of the app).
+ * InstallHelpSheet — manual install instructions for platforms where the
+ * native beforeinstallprompt is unavailable (iOS Safari, dismissed prompts,
+ * Firefox, Safari desktop). Bottom-sheet styled to match the VaultID dark
+ * UI. On Chromium with a pending prompt, the UI calls promptInstall()
+ * directly and this sheet never appears.
  */
-export default function IosInstallSheet({ open, onClose }) {
+const STEPS = {
+  ios: [
+    { Ic: Share, t: 'Tap the Share button', d: 'The square-with-arrow icon in Safari’s toolbar.' },
+    { Ic: Plus, t: 'Tap “Add to Home Screen”', d: 'Scroll the share sheet down a little to find it.' },
+    { Ic: Check, t: 'Tap “Add”', d: 'VaultID appears on your Home Screen like a native app.' },
+  ],
+  android: [
+    { Ic: MoreVertical, t: 'Open the browser menu', d: 'The ⋮ icon at the top corner of Chrome.' },
+    { Ic: Download, t: 'Tap “Install app”', d: 'On some versions it says “Add to Home screen” instead.' },
+    { Ic: Check, t: 'Confirm Install', d: 'VaultID installs as a real app — offline-capable, full-screen.' },
+  ],
+  desktop: [
+    { Ic: Download, t: 'Click the install icon', d: 'Look for the monitor-and-arrow icon at the right of the address bar.' },
+    { Ic: MoreVertical, t: 'Or use the browser menu', d: '⋮ → “Install VaultID…” (Edge: Apps → Install this site as an app).' },
+    { Ic: Check, t: 'Click Install', d: 'VaultID gets its own window and taskbar/dock icon.' },
+  ],
+  other: [
+    { Ic: Globe, t: 'Use an install-capable browser', d: 'Open this page in Chrome or Edge (any device) or Safari (iPhone/iPad).' },
+    { Ic: Download, t: 'Tap “Install App”', d: 'The button appears in the hero section and triggers a true install.' },
+    { Ic: Check, t: 'Works fully offline', d: 'Once installed, your encrypted vault opens even with no connection.' },
+  ],
+};
+
+export default function InstallHelpSheet({ open, onClose, platform = 'desktop' }) {
   if (!open) return null;
+  const steps = STEPS[platform] || STEPS.other;
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Install VaultID on iPhone"
+      aria-label="How to install VaultID"
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
@@ -38,7 +64,7 @@ export default function IosInstallSheet({ open, onClose }) {
               Install VaultID
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--tx2, #AAAACC)' }}>
-              Add it to your Home Screen — works offline, opens full-screen.
+              A real install — own window, offline support, no browser chrome.
             </div>
           </div>
           <button
@@ -49,17 +75,13 @@ export default function IosInstallSheet({ open, onClose }) {
           </button>
         </div>
         <ol style={{ margin: '12px 0 4px', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            { Ic: Share, t: 'Tap the Share button', d: 'The square-with-arrow icon in Safari’s toolbar.' },
-            { Ic: PlusSquare, t: 'Tap “Add to Home Screen”', d: 'Scroll the share sheet down a little to find it.' },
-            { Ic: Check, t: 'Tap “Add”', d: 'VaultID appears on your Home Screen like a native app.' },
-          ].map(({ Ic, t, d }, i) => (
+          {steps.map(({ Ic, t, d }, i) => (
             <li key={t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <span style={{
                 width: 30, height: 30, borderRadius: 9, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'rgba(123,111,232,.14)', border: '1px solid rgba(123,111,232,.35)',
-                color: '#B0A8FF', fontWeight: 700, fontSize: 13,
+                color: '#B0A8FF',
               }}>
                 <Ic size={15} />
               </span>
