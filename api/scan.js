@@ -88,7 +88,7 @@ function applyCors(req, res) {
   res.setHeader('Vary', 'Origin');
   if (origin && isAllowedOrigin(req)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods: 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   }
 }
@@ -116,7 +116,13 @@ function cleanText(value, maxLength = 500) {
 }
 
 function cleanDate(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  // Round-trip through a real calendar so 2021-13-45 or 2023-02-30 fail.
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return value;
 }
 
 function sanitizeResult(result) {

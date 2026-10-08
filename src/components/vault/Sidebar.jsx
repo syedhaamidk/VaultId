@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ShieldCheck, ChevronRight, Zap, Bell, Lock, Globe, LogOut,
+  ShieldCheck, ChevronRight, Zap, Bell, Lock, Globe, LogOut, X,
   Loader2, Download, Upload, Clock, CreditCard, Activity, Wallet, Home, Scale, FolderOpen, Smartphone,
 } from 'lucide-react';
 import { VAULT_CAT } from '../../data.js';
@@ -57,13 +57,18 @@ export default function Sidebar({
           <ShieldCheck size={17} color="#fff" />
         </div>
         <span className="gtext sb-logo-text" style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", flex: 1 }}>VaultID</span>
-        {!sbCollapsed && (
+        {!sbCollapsed && !isDrawer && (
           <button className="sb-collapse-btn" onClick={() => setSbCollapsed(true)} title="Collapse sidebar">
             <ChevronRight size={13} style={{ transform: 'rotate(180deg)' }} />
           </button>
         )}
+        {isDrawer && (
+          <button className="sb-collapse-btn" onClick={onClose} title="Close menu" aria-label="Close menu">
+            <X size={14} />
+          </button>
+        )}
       </div>
-      {sbCollapsed && (
+      {sbCollapsed && !isDrawer && (
         <button className="sb-collapse-btn" style={{ margin: '0 auto 10px' }} onClick={() => setSbCollapsed(false)} title="Expand sidebar">
           <ChevronRight size={13} />
         </button>

@@ -9,5 +9,5 @@ export default defineConfig({
   // nested node_modules with React 19, which produced a two-React bundle and
   // a blank page (minified React error #31). Dedupe makes that impossible.
   resolve: { dedupe: ['react', 'react-dom'] },
-  test:   { environment: 'node', include: ['src/**/*.{test,spec}.{js,jsx}'] },
+  test:   { environment: 'node', include: ['src/**/*.{test,spec}.{js,jsx}', 'api/**/*.test.js'] },
 });

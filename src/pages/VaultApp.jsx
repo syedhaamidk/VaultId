@@ -1267,7 +1267,7 @@ export default function VaultApp({ onBack }) {
             >
               <MoreVertical size={15} />
             </button>
-            <div>
+            <div style={{ minWidth: 0, flex: '1 1 auto', overflow: 'hidden' }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: '-.4px', fontFamily: "'Space Grotesk', sans-serif", color: 'var(--tx)' }}>
                 {VAULT_CAT[cat].label}
               </h2>
@@ -1277,7 +1277,7 @@ export default function VaultApp({ onBack }) {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
             <div className="srch top-s">
               <Search size={14} />
               <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search documents" />
