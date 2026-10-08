@@ -51,7 +51,7 @@ export default function Sidebar({
           aria-label="Close menu"
         />
       )}
-      <aside className={`asidebar${sbCollapsed ? ' collapsed' : ''}`} style={asideStyle}>
+      <aside className={`asidebar${sbCollapsed && !isDrawer ? ' collapsed' : ''}${isDrawer ? ' drawer' : ''}`} style={asideStyle}>
       <div style={{ padding: '8px 10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, var(--ac1), var(--ac2))', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <ShieldCheck size={17} color="#fff" />

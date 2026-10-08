@@ -14,9 +14,9 @@ export default function LockScreen({
 
   return (
     <div
-      className="app"
+      className="app lock-wrap"
       data-t={dark ? 'dark' : 'light'}
-      style={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', position: 'relative', overflow: 'hidden', padding: 'max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom))' }}
+      style={{ height: '100vh', minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', position: 'relative', overflowY: 'auto', overflowX: 'hidden', padding: 'max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom))' }}
     >
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, background: 'radial-gradient(circle, var(--acs) 0%, transparent 65%)', pointerEvents: 'none' }} />
 
@@ -81,7 +81,7 @@ export default function LockScreen({
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: 10, justifyContent: 'center' }}>
+            <div className="lock-keys" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 72px)', gap: 10, justifyContent: 'center' }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                 <button key={n} className="nk" aria-label={`Enter ${n}`} onClick={() => pressKey(String(n))}>{n}</button>
               ))}

@@ -364,13 +364,31 @@ select.ainp option { background: var(--sur); color: var(--tx); }
   .m-search-row.open { display: block; padding: 10px 16px 0; }
   .m-search-row .srch { display: flex; width: 100%; }
   .topbar-aes { display: none !important; }
+  /* Topbar compaction: title shrinks first, actions never clip */
+  .vtopbar { padding: 10px 12px !important; }
+  .vtopbar > div { gap: 8px !important; }
+  .vtopbar h2 { font-size: 16px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vtopbar .abtn.abp { padding: 7px 10px !important; font-size: 12px !important; }
+  .vtopbar .abic { width: 36px; height: 36px; }
   .mob-nav { justify-content: flex-start; overflow-x: auto; gap: 2px; scrollbar-width: none; }
   .mob-nav::-webkit-scrollbar { display: none; }
   .mob-nav > button { flex: 0 0 auto; min-width: 58px; }
 }
+/* Compact lock screen for short viewports (landscape phones, URL-bar) */
+@media (max-height: 780px), (max-width: 640px) {
+  .lock-keys { grid-template-columns: repeat(3, 62px) !important; gap: 8px !important; }
+  .lock-keys .nk { width: 62px; height: 62px; border-radius: 14px; font-size: 18px; }
+  .lock-wrap { justify-content: flex-start !important; padding-top: max(20px, env(safe-area-inset-top)) !important; }
+}
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .asidebar  { display: none !important; }
+  /* The static sidebar hides on mobile — but NEVER the slide-over drawer */
+  .asidebar:not(.drawer) { display: none !important; }
+  .asidebar.drawer {
+    width: min(300px, 88vw) !important;
+    padding-top: max(16px, env(safe-area-inset-top)) !important;
+    padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+  }
   .mob-nav   { display: flex; }
   .top-s     { display: none; }
   .c-area    { padding: 16px 16px 80px; }
