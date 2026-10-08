@@ -254,7 +254,7 @@ select.ainp option { background: var(--sur); color: var(--tx); }
 .uz:hover, .uz.dg { border-color: var(--ac1); background: var(--acs); }
 
 /* Modal */
-.mbg  { position: fixed; inset: 0; background: rgba(0,0,12,.6); z-index: 50; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+.mbg  { position: fixed; inset: 0; background: rgba(0,0,12,.6); z-index: 150; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
 .mbox { background: var(--sur); border-radius: 20px; border: 1px solid var(--bd2); padding: 28px; width: 540px; max-width: 94vw; max-height: 88vh; overflow-y: auto; box-shadow: var(--s4); }
 .mbox:focus { outline: none; }
 
@@ -355,6 +355,19 @@ select.ainp option { background: var(--sur); color: var(--tx); }
 /* Mobile bottom nav */
 .mob-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--sur); border-top: 1px solid var(--bd); padding: 8px 16px; justify-content: space-around; z-index: 40; backdrop-filter: blur(20px); }
 
+/* ── Mobile-only controls (desktop: hidden) ───────────────────────────────── */
+.m-only { display: none !important; }
+.sb-hamburger { display: none; }
+.m-search-row { display: none; }
+@media (max-width: 640px) {
+  .m-only { display: inline-flex !important; }
+  .m-search-row.open { display: block; padding: 10px 16px 0; }
+  .m-search-row .srch { display: flex; width: 100%; }
+  .topbar-aes { display: none !important; }
+  .mob-nav { justify-content: flex-start; overflow-x: auto; gap: 2px; scrollbar-width: none; }
+  .mob-nav::-webkit-scrollbar { display: none; }
+  .mob-nav > button { flex: 0 0 auto; min-width: 58px; }
+}
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .asidebar  { display: none !important; }

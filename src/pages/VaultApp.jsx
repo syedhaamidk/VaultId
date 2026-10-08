@@ -101,6 +101,7 @@ export default function VaultApp({ onBack }) {
   const [pendingScanFile, setPendingScanFile] = useState(null);
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileSearch, setMobileSearch] = useState(false);
 
   // ── cloud sync / auth ──
   const [user,       setUser]       = useState(null);
@@ -1257,13 +1258,12 @@ export default function VaultApp({ onBack }) {
         {/* Topbar */}
         <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--gl)', backdropFilter: 'blur(20px)', flexShrink: 0, gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Mobile hamburger — opens the sidebar as a drawer */}
+            {/* Mobile hamburger — opens the sidebar as a drawer (CSS controls visibility) */}
             <button
-              className="abic"
+              className="abic sb-hamburger"
               aria-label="Open menu"
               onClick={() => setSidebarOpen(true)}
-              style={{ border: '1px solid var(--bd)', display: 'none' }}
-              className="abic sb-hamburger"
+              style={{ border: '1px solid var(--bd)' }}
             >
               <MoreVertical size={15} />
             </button>
@@ -1273,7 +1273,7 @@ export default function VaultApp({ onBack }) {
               </h2>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--tx3)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {filtered.length} doc{filtered.length !== 1 ? 's' : ''}
-                <span className="sbadge" style={{ fontSize: 10, padding: '1px 7px' }}><Shield size={9} />AES-256</span>
+                <span className="sbadge topbar-aes" style={{ fontSize: 10, padding: '1px 7px' }}><Shield size={9} />AES-256</span>
               </p>
             </div>
           </div>
@@ -1282,6 +1282,19 @@ export default function VaultApp({ onBack }) {
               <Search size={14} />
               <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search documents" />
             </div>
+            {/* Mobile search toggle (expands a full-width row below) */}
+            <button className="abic m-only" aria-label="Search documents" aria-expanded={mobileSearch} onClick={() => setMobileSearch((s) => !s)} style={{ border: '1px solid var(--bd)' }}>
+              <Search size={15} />
+            </button>
+            {/* Mobile alerts bell with unread count */}
+            <button className="abic m-only" aria-label={`Alerts${notifs.length ? `, ${notifs.length} unread` : ''}`} onClick={() => setNotifOpen((o) => !o)} style={{ border: '1px solid var(--bd)', position: 'relative' }}>
+              <Bell size={15} />
+              {notifs.length > 0 && (
+                <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 17, height: 17, borderRadius: 9, background: 'var(--re)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                  {notifs.length > 9 ? '9+' : notifs.length}
+                </span>
+              )}
+            </button>
             <button className="abic" aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setDark((d) => !d)} style={{ border: '1px solid var(--bd)' }}>
               {dark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
@@ -1294,6 +1307,23 @@ export default function VaultApp({ onBack }) {
             <button className="abtn abp" onClick={openAdd} style={{ fontSize: 13, padding: '7px 14px' }}>
               <Plus size={14} />Add
             </button>
+          </div>
+        </div>
+
+        {/* Mobile expanding search row */}
+        <div className={`m-search-row${mobileSearch ? ' open' : ''}`}>
+          <div className="srch">
+            <Search size={14} />
+            <input
+              placeholder="Search documents…" value={q}
+              onChange={(e) => setQ(e.target.value)} aria-label="Search documents"
+              onKeyDown={(e) => { if (e.key === 'Escape') { setQ(''); setMobileSearch(false); } }}
+            />
+            {q && (
+              <button className="abic" aria-label="Clear search" onClick={() => setQ('')} style={{ border: 'none' }}>
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1367,14 +1397,15 @@ export default function VaultApp({ onBack }) {
         </div>
       </div>
 
-      {/* Mobile bottom nav */}
-      <div className="mob-nav">
-        {Object.entries(VAULT_CAT).slice(0, 5).map(([k, m]) => {
+      {/* Mobile bottom nav — all categories, scrolls on narrow screens */}
+      <div className="mob-nav" role="tablist" aria-label="Document categories">
+        {Object.entries(VAULT_CAT).map(([k, m]) => {
           const Ic = CAT_ICONS[k] ?? FolderOpen;
+          const active = cat === k;
           return (
-            <button key={k} type="button" onClick={() => setCat(k)} aria-label={m.label} aria-pressed={cat === k} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: cat === k ? 'var(--act)' : 'var(--tx3)', background: 'transparent', border: 0 }}>
+            <button key={k} type="button" role="tab" aria-selected={active} onClick={() => setCat(k)} aria-label={m.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: active ? 'var(--act)' : 'var(--tx3)', background: 'transparent', border: 0 }}>
               <Ic size={22} />
-              <span style={{ fontSize: 9.5, fontWeight: 500 }}>{m.label.split(' ')[0]}</span>
+              <span style={{ fontSize: 9.5, fontWeight: active ? 700 : 500 }}>{m.label.split(' ')[0]}</span>
             </button>
           );
         })}
